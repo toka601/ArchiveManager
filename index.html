@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Archive Manager</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-left">
+      <h1>📚 Archive Manager</h1>
+      <div class="archive-title-box">
+        <input
+          type="text"
+          id="archiveTitleInput"
+          class="archive-title-input"
+          placeholder="セーブデータタイトルを入力..."
+          aria-label="セーブデータタイトル"
+          title="現在のアーカイブ（セーブデータ）のタイトルを入力できます"
+        />
+      </div>
+      <span id="folderStatusBadge" class="status-badge status-virtual" title="画像の保存先状態">
+        保存先: ブラウザ内ストレージ
+      </span>
+    </div>
+    <div class="header-actions">
+      <button id="selectFolderBtn" class="btn btn-secondary" title="PC内のフォルダを選択してimagesフォルダに実ファイルを保存します">
+        📁 画像フォルダ連携
+      </button>
+      <button id="openSaveLoadBtn" class="btn btn-secondary">
+        💾 セーブ / ロード
+      </button>
+      <button id="openAddModalBtn" class="btn btn-primary">
+        ＋ 新規登録
+      </button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- 検索エリア -->
+    <section class="search-panel" aria-label="検索フィルター">
+      <div class="search-blocks">
+        <!-- ブロック1: 検索対象 -->
+        <div class="search-block">
+          <label for="searchTarget">1. 検索対象</label>
+          <select id="searchTarget">
+            <option value="all">すべて（全項目）</option>
+            <option value="title">タイトル</option>
+            <option value="series">シリーズ</option>
+            <option value="author">作者</option>
+            <option value="tags">タグ</option>
+            <option value="memo">説明文兼メモ</option>
+            <option value="url">URL</option>
+          </select>
+        </div>
+
+        <!-- ブロック2: 検索方式 -->
+        <div class="search-block">
+          <label for="searchMatchType">2. 検索方式</label>
+          <select id="searchMatchType">
+            <option value="partial">部分一致</option>
+            <option value="exact">完全一致</option>
+            <option value="prefix">前方一致</option>
+            <option value="suffix">後方一致</option>
+            <option value="regex">正規表現</option>
+          </select>
+        </div>
+
+        <!-- 補助機能: ビジュアル検索展開ボタン -->
+        <div class="search-block search-block-vs">
+          <button
+            type="button"
+            id="vs-opener"
+            class="btn btn-secondary btn-vs-open"
+            title="ブロックと囲み線で検索条件（AND / OR / 除外）を視覚的に作成します"
+          >
+            🧩 ビジュアル検索
+          </button>
+        </div>
+
+        <!-- ブロック3: 検索ワード -->
+        <div class="search-block search-block-word">
+          <label for="searchWord">3. 検索ワード</label>
+          <div class="search-input-wrap">
+            <input
+              type="text"
+              id="searchWord"
+              placeholder="例: SF (アクション OR 冒険) -ホラー"
+              autocomplete="off"
+            />
+            <button id="clearSearchBtn" class="btn-icon" title="クリア">✕</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="search-meta">
+        <span class="search-hint">
+          論理演算: スペースで <code>AND</code> / <code>OR</code> / <code>-除外</code> / <code>( )</code> が利用可能（左の「ビジュアル検索」からも作成できます）
+        </span>
+        <span id="resultCount" class="result-count">0 件表示</span>
+      </div>
+    </section>
+
+    <!-- 一覧表示エリア -->
+    <section id="archiveGrid" class="archive-grid" aria-live="polite"></section>
+  </main>
+
+  <!-- 追加・編集モーダル -->
+  <div id="editModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="editModalTitle">
+    <div class="modal-backdrop" data-close="editModal"></div>
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h2 id="editModalTitle">新規データの登録</h2>
+        <button class="btn-close" data-close="editModal">✕</button>
+      </div>
+      <form id="archiveForm" class="modal-body">
+        <input type="hidden" id="itemId" />
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="itemTitle">タイトル <span class="required">*</span></label>
+            <input type="text" id="itemTitle" required placeholder="作品・アイテムのタイトル" />
+          </div>
+
+          <div class="form-group">
+            <label for="itemSeries">シリーズ</label>
+            <input type="text" id="itemSeries" placeholder="シリーズ名（任意）" />
+          </div>
+
+          <div class="form-group">
+            <label for="itemAuthor">作者</label>
+            <input type="text" id="itemAuthor" placeholder="作者・制作者名" />
+          </div>
+
+          <div class="form-group">
+            <label for="itemUrl">URL</label>
+            <input type="url" id="itemUrl" placeholder="https://example.com" />
+          </div>
+        </div>
+
+        <!-- タグ入力（複数可能） -->
+        <div class="form-group">
+          <label for="tagInput">タグ（Enter または カンマ で追加）</label>
+          <div class="tag-input-container" id="tagContainer">
+            <div id="tagChips" class="tag-chips"></div>
+            <input type="text" id="tagInput" placeholder="タグを入力..." />
+          </div>
+        </div>
+
+        <!-- 画像登録（ドラッグ&ドロップ・連番管理） -->
+        <div class="form-group">
+          <label>画像（複数可能・ドラッグ＆ドロップ対応）</label>
+          <div id="dropZone" class="drop-zone" tabindex="0">
+            <input type="file" id="fileInput" accept="image/*" multiple hidden />
+            <p class="drop-zone-text">
+              ここに画像をドラッグ＆ドロップ<br />
+              <span>またはクリックしてファイルを選択（自動で img1, img2... として保存）</span>
+            </p>
+          </div>
+          <div id="imagePreviewList" class="image-preview-list"></div>
+        </div>
+
+        <!-- 説明文兼メモ -->
+        <div class="form-group">
+          <label for="itemMemo">説明文兼メモ</label>
+          <textarea id="itemMemo" rows="4" placeholder="あらすじ、感想、管理メモなど"></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close="editModal">キャンセル</button>
+          <button type="submit" class="btn btn-primary">保存する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 詳細閲覧モーダル -->
+  <div id="detailModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-close="detailModal"></div>
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h2 id="detailTitle">詳細情報</h2>
+        <button class="btn-close" data-close="detailModal">✕</button>
+      </div>
+      <div id="detailBody" class="modal-body detail-body"></div>
+      <div class="modal-footer">
+        <button type="button" id="detailDeleteBtn" class="btn btn-danger">削除</button>
+        <button type="button" id="detailEditBtn" class="btn btn-primary">編集</button>
+        <button type="button" class="btn btn-secondary" data-close="detailModal">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- セーブ・ロードモーダル -->
+  <div id="saveLoadModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="saveLoadTitle">
+    <div class="modal-backdrop" data-close="saveLoadModal"></div>
+    <div class="modal-content modal-save">
+      <div class="modal-header">
+        <h2 id="saveLoadTitle">💾 セーブ / ロード管理</h2>
+        <button class="btn-close" data-close="saveLoadModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="section-desc">
+          ゲームデータのようにスロットへ状態を記録・復元・クリアできます（ヘッダーのタイトルも一緒に保存されます）。
+        </p>
+
+        <!-- セーブスロット一覧 -->
+        <div id="saveSlotList" class="save-slot-list"></div>
+
+        <hr class="divider" />
+
+        <!-- ファイル書き出し・読み込み -->
+        <div class="file-io-box">
+          <h3>外部ファイル（JSON）でのセーブ / ロード</h3>
+          <p class="section-desc">バックアップや別環境へのデータ移行に使用します（タイトル・画像ファイル名情報・連番カウンターも保持されます）。</p>
+          <div class="file-io-actions">
+            <button id="exportJsonBtn" class="btn btn-secondary">⬇ JSONファイルにセーブ</button>
+            <label class="btn btn-secondary file-label">
+              ⬆ JSONファイルからロード
+              <input type="file" id="importJsonInput" accept=".json" hidden />
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- トースト通知 -->
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- 検索エンジン -->
+  <script src="searcher.js"></script>
+
+  <!-- ビジュアル検索モジュール -->
+  <script src="visual-search/config.js"></script>
+  <script src="visual-search/data.js"></script>
+  <script src="visual-search/render/block.js"></script>
+  <script src="visual-search/render/result.js"></script>
+  <script src="visual-search/render/canvas.js"></script>
+  <script src="visual-search/render/blocklist.js"></script>
+  <script src="visual-search/render/tips.js"></script>
+  <script src="visual-search/query.js"></script>
+  <script src="visual-search/controller.js"></script>
+  <script src="visual-search/visualSearch.js"></script>
+
+  <!-- アプリ本体 -->
+  <script src="app.js"></script>
+</body>
+</html>
