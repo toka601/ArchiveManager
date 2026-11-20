@@ -748,8 +748,12 @@ textarea:focus {
 .image-preview-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(115px, 1fr));
+  align-content: start;
   gap: 0.75rem;
   margin-top: 0.75rem;
+  max-height: 250px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .preview-item {
@@ -765,6 +769,8 @@ textarea:focus {
 .preview-item img {
   width: 100%;
   height: 90px;
+  min-height: 90px;
+  flex-shrink: 0;
   object-fit: cover;
 }
 
@@ -799,20 +805,53 @@ textarea:focus {
   justify-content: space-between;
   align-items: center;
   gap: 0.75rem;
+  flex-shrink: 0;
 }
 
-.existing-image-filter {
-  width: 250px;
-  max-width: 100%;
-  padding: 0.4rem 0.7rem;
+.existing-range-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.existing-range-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.existing-range-input {
+  width: 130px;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 0.38rem 0.65rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.existing-range-input:focus {
+  border-color: var(--primary);
+}
+
+.existing-range-sep {
+  color: var(--text-muted);
   font-size: 0.85rem;
 }
 
 .existing-image-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  align-content: start;
   gap: 0.75rem;
-  min-height: 160px;
+  min-height: 180px;
+  max-height: 55vh;
+  overflow-y: auto;
+  padding: 2px 6px 2px 2px;
 }
 
 .existing-image-empty {
@@ -849,7 +888,9 @@ textarea:focus {
 
 .existing-image-card img {
   width: 100%;
-  height: 105px;
+  height: 120px;
+  min-height: 120px;
+  flex-shrink: 0;
   object-fit: cover;
   display: block;
 }
@@ -857,7 +898,7 @@ textarea:focus {
 .existing-image-name {
   font-size: 0.78rem;
   font-weight: 600;
-  padding: 0.3rem 0.45rem;
+  padding: 0.35rem 0.45rem;
   text-align: center;
   color: var(--text-main);
   white-space: nowrap;
