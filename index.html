@@ -214,13 +214,29 @@
       <div class="modal-body">
         <div class="existing-image-toolbar">
           <span id="existingImageSourceLabel" class="section-desc">参照先: images/</span>
-          <input
-            type="text"
-            id="existingImageFilterInput"
-            class="existing-image-filter"
-            placeholder="ファイル名で絞り込み（例: img1）..."
-            autocomplete="off"
-          />
+          <div class="existing-range-controls">
+            <span class="existing-range-label">番号範囲 (img):</span>
+            <input
+              type="number"
+              id="existingImageMinNum"
+              class="existing-range-input"
+              min="1"
+              placeholder="最小 (例: 20)"
+              autocomplete="off"
+            />
+            <span class="existing-range-sep">〜</span>
+            <input
+              type="number"
+              id="existingImageMaxNum"
+              class="existing-range-input"
+              min="1"
+              placeholder="最大 (例: 50)"
+              autocomplete="off"
+            />
+            <button type="button" id="clearExistingRangeBtn" class="btn btn-secondary btn-sm" title="範囲指定をクリア">
+              クリア
+            </button>
+          </div>
         </div>
         <div id="existingImageGrid" class="existing-image-grid"></div>
       </div>
