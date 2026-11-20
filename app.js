@@ -100,21 +100,26 @@ class ImageStorageManager {
     };
   }
 
-  // セーブデータから連携フォルダを復元する
-  async restoreLinkedFolder(linkedFolderMeta, allowPrompt = true) {
+  /**
+   * セーブデータから連携フォルダを復元する
+   * @returns {Promise<{status: "none"|"connected"|"needs_relink", folderName?: string}>}
+   */
+  async restoreLinkedFolder(linkedFolderMeta, allowPrompt = false) {
     if (!linkedFolderMeta || !linkedFolderMeta.handleId) {
       this.disconnectFolder();
-      return { connected: false, error: null };
+      return { status: "none" };
     }
 
     const folderName = linkedFolderMeta.folderName || "指定フォルダ";
 
+    // すでに同じフォルダと連携済みならそのまま維持
+    if (this.isFolderConnected() && this.currentHandleId === linkedFolderMeta.handleId) {
+      return { status: "connected", folderName: this.currentFolderName };
+    }
+
     if (!this.db) {
       this.disconnectFolder();
-      return {
-        connected: false,
-        error: `ストレージが利用できないため、連携フォルダ「${folderName}」を復元できませんでした。ブラウザ内ストレージを使用します。`
-      };
+      return { status: "needs_relink", folderName };
     }
 
     const record = await new Promise((resolve) => {
@@ -127,10 +132,7 @@ class ImageStorageManager {
 
     if (!record || !record.handle) {
       this.disconnectFolder();
-      return {
-        connected: false,
-        error: `記録されていた連携フォルダ「${folderName}」へのアクセス情報が見つかりません。ブラウザ内ストレージを使用します。`
-      };
+      return { status: "needs_relink", folderName };
     }
 
     const dirHandle = record.handle;
@@ -143,10 +145,7 @@ class ImageStorageManager {
         }
         if (perm !== "granted") {
           this.disconnectFolder();
-          return {
-            connected: false,
-            error: `連携フォルダ「${folderName}」へのアクセスが許可されませんでした。ブラウザ内ストレージを使用します。`
-          };
+          return { status: "needs_relink", folderName };
         }
       }
 
@@ -161,14 +160,11 @@ class ImageStorageManager {
       this.currentFolderName = dirHandle.name;
       this.clearUrlCache();
 
-      return { connected: true, folderName: dirHandle.name, error: null };
+      return { status: "connected", folderName: dirHandle.name };
     } catch (e) {
-      console.warn("連携フォルダの復元に失敗:", e);
+      console.warn("連携フォルダの自動復元に失敗（再指定が必要）:", e);
       this.disconnectFolder();
-      return {
-        connected: false,
-        error: `連携フォルダ「${folderName}」が見つからないかアクセスできません（削除・移動された可能性があります）。ブラウザ内ストレージを使用します。`
-      };
+      return { status: "needs_relink", folderName };
     }
   }
 
@@ -207,6 +203,41 @@ class ImageStorageManager {
     this.urlCache.set(filename, objectUrl);
 
     return filename;
+  }
+
+  // 連携フォルダの images/ 内、またはブラウザ内ストレージに存在する画像ファイル名一覧を取得
+  async listAvailableImages() {
+    const filenames = [];
+    const imageExtRegex = /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i;
+
+    if (this.imagesDirHandle) {
+      try {
+        for await (const [name, handle] of this.imagesDirHandle.entries()) {
+          if (handle.kind === "file" && imageExtRegex.test(name)) {
+            filenames.push(name);
+          }
+        }
+      } catch (e) {
+        console.warn("imagesフォルダの一覧取得に失敗:", e);
+      }
+    } else if (this.db) {
+      const records = await new Promise((resolve) => {
+        const tx = this.db.transaction("images", "readonly");
+        const store = tx.objectStore("images");
+        const req = store.getAllKeys();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => resolve([]);
+      });
+      for (const key of records) {
+        if (typeof key === "string") {
+          filenames.push(key);
+        }
+      }
+    }
+
+    // img1, img2, ..., img10 の自然順でソート
+    filenames.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+    return filenames;
   }
 
   // ファイル名（"img1.png" など）から表示用URLを取得
@@ -300,6 +331,10 @@ class ArchiveApp {
     this.currentTags = [];
     this.currentImages = [];
     this.activeDetailId = null;
+
+    // 既存画像選択ピッカー用の一時状態
+    this.availableExistingImages = [];
+    this.selectedExistingSet = new Set();
   }
 
   async init() {
@@ -390,16 +425,9 @@ class ArchiveApp {
     };
   }
 
-  async applySavePayload(payload, showRestoreAlert = true) {
+  async applySavePayload(payload, promptRelinkIfNeeded = true) {
     if (!payload || !Array.isArray(payload.items)) {
       throw new Error("不正なセーブデータ形式です。");
-    }
-
-    const restoreResult = await this.storage.restoreLinkedFolder(payload.linkedFolder, true);
-    this.updateFolderStatusUI();
-
-    if (restoreResult.error && showRestoreAlert) {
-      alert(restoreResult.error);
     }
 
     this.archiveTitle = typeof payload.title === "string" ? payload.title : "";
@@ -408,7 +436,25 @@ class ArchiveApp {
     this.items = payload.items;
     this.imageCounter = typeof payload.imageCounter === "number" ? payload.imageCounter : 1;
     this.syncImageCounterWithData();
+
+    // セーブデータに記録されたフォルダ連携アクセスを復元
+    const restoreResult = await this.storage.restoreLinkedFolder(payload.linkedFolder, false);
+    this.updateFolderStatusUI();
     this.autoSave();
+
+    // 自動復元できなかった場合は、ユーザー操作でフォルダを選択し直せるモーダルを表示
+    if (restoreResult.status === "needs_relink" && promptRelinkIfNeeded) {
+      this.openRelinkFolderModal(restoreResult.folderName);
+    }
+  }
+
+  // 連携フォルダ再指定モーダルを開く
+  openRelinkFolderModal(folderName) {
+    const nameEl = document.getElementById("relinkTargetFolderName");
+    if (nameEl) {
+      nameEl.textContent = folderName || "指定フォルダ";
+    }
+    this.openModal("relinkFolderModal");
   }
 
   // イベント登録
@@ -457,6 +503,30 @@ class ArchiveApp {
         if (err.name === "AbortError") return;
         alert(err.message);
       }
+    });
+
+    // 連携フォルダ再指定モーダル内のボタン
+    document.getElementById("relinkSelectFolderBtn").addEventListener("click", async () => {
+      try {
+        const folderName = await this.storage.connectLocalFolder();
+        this.updateFolderStatusUI();
+        this.autoSave();
+        this.closeModal("relinkFolderModal");
+        this.showToast(`「${folderName}/」と再連携しました`);
+        await this.renderGrid();
+      } catch (err) {
+        if (err.name === "AbortError") return;
+        alert(err.message);
+      }
+    });
+
+    document.getElementById("relinkUseBrowserStorageBtn").addEventListener("click", async () => {
+      this.storage.disconnectFolder();
+      this.updateFolderStatusUI();
+      this.autoSave();
+      this.closeModal("relinkFolderModal");
+      this.showToast("ブラウザ内ストレージを使用します");
+      await this.renderGrid();
     });
 
     // 新規登録モーダルを開く
@@ -514,6 +584,29 @@ class ArchiveApp {
       }
     });
 
+    // 「imagesフォルダから既存画像を選択」ボタン & モーダル内イベント
+    document.getElementById("openExistingImageBtn").addEventListener("click", async () => {
+      await this.openExistingImagePicker();
+    });
+
+    document.getElementById("existingImageFilterInput").addEventListener("input", async () => {
+      await this.renderExistingImageGrid();
+    });
+
+    document.getElementById("confirmExistingImageBtn").addEventListener("click", async () => {
+      if (this.selectedExistingSet.size === 0) {
+        this.closeModal("existingImageModal");
+        return;
+      }
+      const addedList = Array.from(this.selectedExistingSet);
+      for (const fname of addedList) {
+        this.currentImages.push(fname);
+      }
+      await this.renderImagePreviews();
+      this.closeModal("existingImageModal");
+      this.showToast(`${addedList.length}枚の既存画像を追加しました`);
+    });
+
     // フォーム送信（追加・編集確定）
     document.getElementById("archiveForm").addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -545,7 +638,6 @@ class ArchiveApp {
         : "save";
       const exportFilename = `archive_${safeTitle}_${timestamp}.json`;
 
-      // 連携フォルダが接続されている場合は、指定フォルダ直下（imagesと同階層）に直接配置
       if (this.storage.isFolderConnected()) {
         try {
           await this.storage.writeFolderJsonFile(exportFilename, jsonStr);
@@ -556,7 +648,6 @@ class ArchiveApp {
         }
       }
 
-      // フォルダ未連携時は通常のダウンロード
       const blob = new Blob([jsonStr], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -574,10 +665,10 @@ class ArchiveApp {
       try {
         const text = await file.text();
         const parsed = JSON.parse(text);
+        this.closeModal("saveLoadModal");
         await this.applySavePayload(parsed, true);
         await this.renderGrid();
         this.renderSaveSlots();
-        this.closeModal("saveLoadModal");
         this.showToast(`「${file.name}」からロードしました`);
       } catch (err) {
         alert("ファイルの読み込みに失敗しました: " + err.message);
@@ -585,6 +676,93 @@ class ArchiveApp {
         e.target.value = "";
       }
     });
+  }
+
+  // 既存画像選択ピッカーを開く
+  async openExistingImagePicker() {
+    this.selectedExistingSet.clear();
+    const filterInput = document.getElementById("existingImageFilterInput");
+    if (filterInput) filterInput.value = "";
+
+    const sourceLabel = document.getElementById("existingImageSourceLabel");
+    if (sourceLabel) {
+      sourceLabel.textContent = this.storage.isFolderConnected()
+        ? `参照先: ${this.storage.currentFolderName}/images/`
+        : "参照先: ブラウザ内ストレージ（未連携）";
+    }
+
+    this.availableExistingImages = await this.storage.listAvailableImages();
+    this.updateExistingSelectedCount();
+    await this.renderExistingImageGrid();
+    this.openModal("existingImageModal");
+  }
+
+  updateExistingSelectedCount() {
+    const countEl = document.getElementById("existingSelectedCount");
+    if (countEl) {
+      countEl.textContent = `${this.selectedExistingSet.size} 枚選択中`;
+    }
+  }
+
+  // 既存画像一覧グリッドを描画
+  async renderExistingImageGrid() {
+    const grid = document.getElementById("existingImageGrid");
+    const filterInput = document.getElementById("existingImageFilterInput");
+    const keyword = filterInput ? filterInput.value.trim().toLowerCase() : "";
+
+    grid.innerHTML = "";
+
+    const filteredNames = keyword
+      ? this.availableExistingImages.filter((name) => name.toLowerCase().includes(keyword))
+      : this.availableExistingImages;
+
+    if (filteredNames.length === 0) {
+      grid.innerHTML = `
+        <div class="existing-image-empty">
+          選択可能な画像が見つかりません。<br />
+          先にドラッグ＆ドロップで画像を登録するか、連携フォルダの <code>images/</code> に画像を入れてください。
+        </div>
+      `;
+      return;
+    }
+
+    for (const filename of filteredNames) {
+      const url = await this.storage.getImageUrl(filename);
+      const isSelected = this.selectedExistingSet.has(filename);
+      const alreadyAttached = this.currentImages.includes(filename);
+
+      const card = document.createElement("div");
+      card.className = "existing-image-card" + (isSelected ? " is-selected" : "");
+      card.innerHTML = `
+        ${alreadyAttached ? `<span class="existing-image-in-use">追加済</span>` : ""}
+        ${isSelected ? `<span class="existing-image-badge">✓ 選択</span>` : ""}
+        ${
+          url
+            ? `<img src="${url}" alt="${this.escapeHtml(filename)}" />`
+            : `<div style="height:105px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;color:#94a3b8;">読込不可</div>`
+        }
+        <div class="existing-image-name" title="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</div>
+      `;
+
+      card.addEventListener("click", () => {
+        if (this.selectedExistingSet.has(filename)) {
+          this.selectedExistingSet.delete(filename);
+          card.classList.remove("is-selected");
+          const badge = card.querySelector(".existing-image-badge");
+          if (badge) badge.remove();
+        } else {
+          this.selectedExistingSet.add(filename);
+          card.classList.add("is-selected");
+          const badge = document.createElement("span");
+          badge.className = "existing-image-badge";
+          badge.textContent = "✓ 選択";
+          card.appendChild(badge);
+        }
+        this.updateExistingSelectedCount();
+      });
+
+      grid.appendChild(card);
+    }
   }
 
   // 追い打ち検索の条件を追加
@@ -654,6 +832,16 @@ class ArchiveApp {
       return;
     }
 
+    // すでに images/ フォルダにある最大番号も考慮して重複を回避
+    const existing = await this.storage.listAvailableImages();
+    for (const fname of existing) {
+      const m = fname.match(/^img(\d+)/i);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (n >= this.imageCounter) this.imageCounter = n + 1;
+      }
+    }
+
     for (const file of imageFiles) {
       const extMatch = file.name.match(/\.[a-zA-Z0-9]+$/);
       const ext = extMatch ? extMatch[0].toLowerCase() : ".png";
@@ -705,8 +893,8 @@ class ArchiveApp {
       const itemEl = document.createElement("div");
       itemEl.className = "preview-item";
       itemEl.innerHTML = `
-        ${url ? `<img src="${url}" alt="${filename}" />` : `<div style="height:90px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;color:#94a3b8;">No Image</div>`}
-        <span class="preview-filename" title="${filename}">${filename}</span>
+        ${url ? `<img src="${url}" alt="${this.escapeHtml(filename)}" />` : `<div style="height:90px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;color:#94a3b8;">No Image</div>`}
+        <span class="preview-filename" title="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</span>
         <button type="button" class="preview-remove" title="リストから外す">✕</button>
       `;
 
@@ -791,13 +979,11 @@ class ArchiveApp {
 
   // 一覧の検索＆描画（追い打ち検索パイプライン ＋ 現在の入力欄）
   async renderGrid() {
-    // 1. 確定済みの追い打ち検索条件を順番に適用
     let filtered = [...this.items];
     for (const filter of this.searchFilters) {
       filtered = Searcher.search(filtered, filter.word, filter.target, filter.matchType);
     }
 
-    // 2. 現在入力中の検索欄の条件を重ねて適用
     const target = document.getElementById("searchTarget").value;
     const matchType = document.getElementById("searchMatchType").value;
     const searchWord = document.getElementById("searchWord").value;
@@ -836,7 +1022,7 @@ class ArchiveApp {
           ${
             thumbUrl
               ? `<img src="${thumbUrl}" alt="${this.escapeHtml(item.title)}" />`
-              : `<span class="card-thumb-placeholder">${hasImages ? item.images[0] : "No Image"}</span>`
+              : `<span class="card-thumb-placeholder">${hasImages ? this.escapeHtml(item.images[0]) : "No Image"}</span>`
           }
           ${hasImages ? `<span class="img-count-badge">🖼 ${item.images.length}枚</span>` : ""}
         </div>
@@ -891,7 +1077,7 @@ class ArchiveApp {
         const url = await this.storage.getImageUrl(fname);
         itemsHtml.push(`
           <div class="detail-gallery-item">
-            ${url ? `<img src="${url}" alt="${fname}" />` : `<div style="padding:2rem;color:#94a3b8;">画像未読込</div>`}
+            ${url ? `<img src="${url}" alt="${this.escapeHtml(fname)}" />` : `<div style="padding:2rem;color:#94a3b8;">画像未読込</div>`}
             <div class="detail-gallery-caption">images/${this.escapeHtml(fname)}</div>
           </div>
         `);
@@ -914,7 +1100,7 @@ class ArchiveApp {
             : "—"
         }</td></tr>
         <tr><th>タグ</th><td>${tagsHtml || "—"}</td></tr>
-        <tr><th>登録画像ファイル</th><td>${(item.images || []).join(", ") || "なし"}</td></tr>
+        <tr><th>登録画像ファイル</th><td>${(item.images || []).map((f) => this.escapeHtml(f)).join(", ") || "なし"}</td></tr>
       </table>
       <div>
         <h4 style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.4rem;">説明文兼メモ</h4>
@@ -999,9 +1185,9 @@ class ArchiveApp {
       if (data) {
         card.querySelector(".btn-slot-load").addEventListener("click", async () => {
           if (!confirm(`SLOT ${slotNum} のデータをロードしますか？（現在の未セーブ状態は上書きされます）`)) return;
+          this.closeModal("saveLoadModal");
           await this.applySavePayload(data, true);
           await this.renderGrid();
-          this.closeModal("saveLoadModal");
           this.showToast(`SLOT ${slotNum} からロードしました`);
         });
 
