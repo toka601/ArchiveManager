@@ -589,7 +589,17 @@ class ArchiveApp {
       await this.openExistingImagePicker();
     });
 
-    document.getElementById("existingImageFilterInput").addEventListener("input", async () => {
+    document.getElementById("existingImageMinNum").addEventListener("input", async () => {
+      await this.renderExistingImageGrid();
+    });
+
+    document.getElementById("existingImageMaxNum").addEventListener("input", async () => {
+      await this.renderExistingImageGrid();
+    });
+
+    document.getElementById("clearExistingRangeBtn").addEventListener("click", async () => {
+      document.getElementById("existingImageMinNum").value = "";
+      document.getElementById("existingImageMaxNum").value = "";
       await this.renderExistingImageGrid();
     });
 
@@ -681,8 +691,10 @@ class ArchiveApp {
   // 既存画像選択ピッカーを開く
   async openExistingImagePicker() {
     this.selectedExistingSet.clear();
-    const filterInput = document.getElementById("existingImageFilterInput");
-    if (filterInput) filterInput.value = "";
+    const minInput = document.getElementById("existingImageMinNum");
+    const maxInput = document.getElementById("existingImageMaxNum");
+    if (minInput) minInput.value = "";
+    if (maxInput) maxInput.value = "";
 
     const sourceLabel = document.getElementById("existingImageSourceLabel");
     if (sourceLabel) {
@@ -707,20 +719,33 @@ class ArchiveApp {
   // 既存画像一覧グリッドを描画
   async renderExistingImageGrid() {
     const grid = document.getElementById("existingImageGrid");
-    const filterInput = document.getElementById("existingImageFilterInput");
-    const keyword = filterInput ? filterInput.value.trim().toLowerCase() : "";
+    const minRaw = document.getElementById("existingImageMinNum")?.value.trim() ?? "";
+    const maxRaw = document.getElementById("existingImageMaxNum")?.value.trim() ?? "";
+
+    const minNum = minRaw !== "" ? parseInt(minRaw, 10) : null;
+    const maxNum = maxRaw !== "" ? parseInt(maxRaw, 10) : null;
+    const hasMin = minNum !== null && !Number.isNaN(minNum);
+    const hasMax = maxNum !== null && !Number.isNaN(maxNum);
 
     grid.innerHTML = "";
 
-    const filteredNames = keyword
-      ? this.availableExistingImages.filter((name) => name.toLowerCase().includes(keyword))
-      : this.availableExistingImages;
+    const filteredNames =
+      hasMin || hasMax
+        ? this.availableExistingImages.filter((name) => {
+            const match = name.match(/^img(\d+)/i) || name.match(/(\d+)/);
+            if (!match) return false;
+            const num = parseInt(match[1], 10);
+            if (hasMin && num < minNum) return false;
+            if (hasMax && num > maxNum) return false;
+            return true;
+          })
+        : this.availableExistingImages;
 
     if (filteredNames.length === 0) {
       grid.innerHTML = `
         <div class="existing-image-empty">
-          選択可能な画像が見つかりません。<br />
-          先にドラッグ＆ドロップで画像を登録するか、連携フォルダの <code>images/</code> に画像を入れてください。
+          指定された条件に一致する画像が見つかりません。<br />
+          範囲指定を変更するか、先にドラッグ＆ドロップで画像を登録してください。
         </div>
       `;
       return;
@@ -739,7 +764,7 @@ class ArchiveApp {
         ${
           url
             ? `<img src="${url}" alt="${this.escapeHtml(filename)}" />`
-            : `<div style="height:105px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;color:#94a3b8;">読込不可</div>`
+            : `<div style="height:120px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;color:#94a3b8;">読込不可</div>`
         }
         <div class="existing-image-name" title="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</div>
       `;
