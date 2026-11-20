@@ -588,6 +588,14 @@ textarea:focus {
   max-width: 780px;
 }
 
+#existingImageModal {
+  z-index: 120;
+}
+
+#relinkFolderModal {
+  z-index: 130;
+}
+
 .modal-header {
   padding: 1rem 1.25rem;
   border-bottom: 1px solid var(--border-color);
@@ -624,6 +632,7 @@ textarea:focus {
   border-top: 1px solid var(--border-color);
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: 0.6rem;
 }
 
@@ -695,11 +704,11 @@ textarea:focus {
   font-weight: bold;
 }
 
-/* Drag & Drop Zone */
+/* Drag & Drop Zone & Existing Image Picker */
 .drop-zone {
   border: 2px dashed var(--border-color);
   border-radius: var(--radius);
-  padding: 1.5rem;
+  padding: 1.35rem;
   text-align: center;
   background-color: var(--bg-input);
   cursor: pointer;
@@ -720,6 +729,19 @@ textarea:focus {
 .drop-zone-text span {
   font-size: 0.8rem;
   font-weight: 400;
+  color: var(--text-muted);
+}
+
+.image-picker-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.6rem;
+}
+
+.image-picker-hint {
+  font-size: 0.78rem;
   color: var(--text-muted);
 }
 
@@ -768,6 +790,124 @@ textarea:focus {
   height: 22px;
   font-size: 0.75rem;
   cursor: pointer;
+}
+
+/* Existing Image Selection Modal */
+.existing-image-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.existing-image-filter {
+  width: 250px;
+  max-width: 100%;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.existing-image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+  gap: 0.75rem;
+  min-height: 160px;
+}
+
+.existing-image-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: var(--text-muted);
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  font-size: 0.88rem;
+}
+
+.existing-image-card {
+  position: relative;
+  background-color: var(--bg-input);
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.15s, transform 0.12s;
+}
+
+.existing-image-card:hover {
+  border-color: #64748b;
+  transform: translateY(-2px);
+}
+
+.existing-image-card.is-selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
+}
+
+.existing-image-card img {
+  width: 100%;
+  height: 105px;
+  object-fit: cover;
+  display: block;
+}
+
+.existing-image-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.3rem 0.45rem;
+  text-align: center;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.existing-image-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background-color: var(--primary);
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+}
+
+.existing-image-in-use {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background-color: rgba(15, 23, 42, 0.85);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  font-size: 0.68rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 6px;
+}
+
+.existing-selected-count {
+  margin-right: auto;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #93c5fd;
+}
+
+/* Relink Folder Modal */
+.relink-target-box {
+  background-color: var(--bg-input);
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  font-size: 0.92rem;
+  color: #93c5fd;
+}
+
+.relink-target-box strong {
+  color: #ffffff;
 }
 
 /* Detail Modal */
