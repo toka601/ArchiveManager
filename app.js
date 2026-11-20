@@ -247,10 +247,10 @@ class ImageStorageManager {
     return null;
   }
 
-  // 連携フォルダ内に savedata.json を直接保存
-  async writeFolderSaveData(jsonString) {
+  // 連携フォルダ直下（imagesと同格の場所）にエクスポート用JSONファイルを書き出す
+  async writeFolderJsonFile(filename, jsonString) {
     if (!this.rootDirHandle) return false;
-    const fileHandle = await this.rootDirHandle.getFileHandle("savedata.json", { create: true });
+    const fileHandle = await this.rootDirHandle.getFileHandle(filename, { create: true });
     const writable = await fileHandle.createWritable();
     await writable.write(jsonString);
     await writable.close();
@@ -269,11 +269,32 @@ class ArchiveApp {
     storageKeySlots: "archive_app_save_slots_v1"
   };
 
+  static TARGET_LABELS = {
+    all: "すべて",
+    title: "タイトル",
+    series: "シリーズ",
+    author: "作者",
+    tags: "タグ",
+    memo: "説明文兼メモ",
+    url: "URL"
+  };
+
+  static MATCH_TYPE_LABELS = {
+    partial: "部分一致",
+    exact: "完全一致",
+    prefix: "前方一致",
+    suffix: "後方一致",
+    regex: "正規表現"
+  };
+
   constructor() {
     this.archiveTitle = ""; // セーブデータに対するタイトル
     this.items = [];
     this.imageCounter = 1; // "img" + 数字 の連番カウンター（単調増加）
     this.storage = new ImageStorageManager();
+
+    // 追い打ち検索の確定済みフィルター一覧
+    this.searchFilters = []; // [{ target, matchType, word }, ...]
 
     // フォーム編集用の一時状態
     this.currentTags = [];
@@ -296,6 +317,7 @@ class ArchiveApp {
     this.syncImageCounterWithData();
     this.syncArchiveTitleUI();
     this.updateFolderStatusUI();
+    this.renderActiveFilters();
     await this.renderGrid();
   }
 
@@ -327,7 +349,7 @@ class ArchiveApp {
   updateFolderStatusUI() {
     const badge = document.getElementById("folderStatusBadge");
     if (this.storage.isFolderConnected()) {
-      badge.textContent = `保存先: ${this.storage.currentFolderName}/images/`;
+      badge.textContent = `連携中: ${this.storage.currentFolderName}/`;
       badge.className = "status-badge status-folder";
     } else {
       badge.textContent = "保存先: ブラウザ内ストレージ";
@@ -410,13 +432,26 @@ class ArchiveApp {
       triggerSearch();
     });
 
-    // 画像フォルダ連携ボタン
+    // 追い打ち検索ボタン
+    document.getElementById("drillDownSearchBtn").addEventListener("click", () => {
+      this.addDrillDownFilter();
+    });
+
+    // 追い打ち検索の「すべて解除」ボタン
+    document.getElementById("clearAllFiltersBtn").addEventListener("click", () => {
+      this.searchFilters = [];
+      this.renderActiveFilters();
+      this.renderGrid();
+      this.showToast("追い打ち検索の条件をすべて解除しました");
+    });
+
+    // 連携フォルダボタン
     document.getElementById("selectFolderBtn").addEventListener("click", async () => {
       try {
         const folderName = await this.storage.connectLocalFolder();
         this.updateFolderStatusUI();
         this.autoSave();
-        this.showToast(`「${folderName}/images/」と連携しました`);
+        this.showToast(`「${folderName}/」を連携フォルダに設定しました`);
         await this.renderGrid();
       } catch (err) {
         if (err.name === "AbortError") return;
@@ -504,27 +539,32 @@ class ArchiveApp {
     document.getElementById("exportJsonBtn").addEventListener("click", async () => {
       const payload = this.createSavePayload();
       const jsonStr = JSON.stringify(payload, null, 2);
-
-      if (this.storage.isFolderConnected()) {
-        try {
-          await this.storage.writeFolderSaveData(jsonStr);
-        } catch (e) {
-          console.warn("連携フォルダへの savedata.json 書き出しに失敗:", e);
-        }
-      }
-
-      const blob = new Blob([jsonStr], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
       const timestamp = new Date().toISOString().slice(0, 10);
       const safeTitle = payload.title
         ? payload.title.replace(/[\\/:*?"<>|]/g, "_")
         : "save";
+      const exportFilename = `archive_${safeTitle}_${timestamp}.json`;
+
+      // 連携フォルダが接続されている場合は、指定フォルダ直下（imagesと同階層）に直接配置
+      if (this.storage.isFolderConnected()) {
+        try {
+          await this.storage.writeFolderJsonFile(exportFilename, jsonStr);
+          this.showToast(`連携フォルダ直下に「${exportFilename}」を保存しました`);
+          return;
+        } catch (e) {
+          console.warn("連携フォルダへのJSON書き出しに失敗したため、通常ダウンロードに切り替えます:", e);
+        }
+      }
+
+      // フォルダ未連携時は通常のダウンロード
+      const blob = new Blob([jsonStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
       a.href = url;
-      a.download = `archive_${safeTitle}_${timestamp}.json`;
+      a.download = exportFilename;
       a.click();
       URL.revokeObjectURL(url);
-      this.showToast("セーブデータをJSONファイルとして保存しました");
+      this.showToast(`「${exportFilename}」をダウンロードしました`);
     });
 
     // JSONインポート（ロード）
@@ -544,6 +584,65 @@ class ArchiveApp {
       } finally {
         e.target.value = "";
       }
+    });
+  }
+
+  // 追い打ち検索の条件を追加
+  addDrillDownFilter() {
+    const target = document.getElementById("searchTarget").value;
+    const matchType = document.getElementById("searchMatchType").value;
+    const wordInput = document.getElementById("searchWord");
+    const word = wordInput.value.trim();
+
+    if (!word) {
+      this.showToast("検索ワードを入力してから「追い打ち検索」を押してください");
+      wordInput.focus();
+      return;
+    }
+
+    this.searchFilters.push({ target, matchType, word });
+    wordInput.value = "";
+
+    this.renderActiveFilters();
+    this.renderGrid();
+    this.showToast("絞り込み条件を追加しました");
+  }
+
+  // 追い打ち検索の適用中条件を search-panel 最上部に描画
+  renderActiveFilters() {
+    const area = document.getElementById("activeFiltersArea");
+    const container = document.getElementById("activeFilterChips");
+    if (!area || !container) return;
+
+    if (this.searchFilters.length === 0) {
+      area.classList.add("hidden");
+      container.innerHTML = "";
+      return;
+    }
+
+    area.classList.remove("hidden");
+    container.innerHTML = "";
+
+    this.searchFilters.forEach((filter, index) => {
+      const targetLabel = ArchiveApp.TARGET_LABELS[filter.target] || filter.target;
+      const matchLabel = ArchiveApp.MATCH_TYPE_LABELS[filter.matchType] || filter.matchType;
+
+      const chip = document.createElement("div");
+      chip.className = "filter-chip";
+      chip.innerHTML = `
+        <span class="filter-chip-step">${index + 1}</span>
+        <span class="filter-chip-meta">${this.escapeHtml(targetLabel)}（${this.escapeHtml(matchLabel)}）:</span>
+        <span class="filter-chip-word">${this.escapeHtml(filter.word)}</span>
+        <button type="button" class="filter-chip-remove" title="この条件を解除">×</button>
+      `;
+
+      chip.querySelector(".filter-chip-remove").addEventListener("click", () => {
+        this.searchFilters.splice(index, 1);
+        this.renderActiveFilters();
+        this.renderGrid();
+      });
+
+      container.appendChild(chip);
     });
   }
 
@@ -690,15 +789,23 @@ class ArchiveApp {
     return true;
   }
 
-  // 一覧の検索＆描画
+  // 一覧の検索＆描画（追い打ち検索パイプライン ＋ 現在の入力欄）
   async renderGrid() {
+    // 1. 確定済みの追い打ち検索条件を順番に適用
+    let filtered = [...this.items];
+    for (const filter of this.searchFilters) {
+      filtered = Searcher.search(filtered, filter.word, filter.target, filter.matchType);
+    }
+
+    // 2. 現在入力中の検索欄の条件を重ねて適用
     const target = document.getElementById("searchTarget").value;
     const matchType = document.getElementById("searchMatchType").value;
     const searchWord = document.getElementById("searchWord").value;
+    filtered = Searcher.search(filtered, searchWord, target, matchType);
 
-    const filtered = Searcher.search(this.items, searchWord, target, matchType);
-
-    document.getElementById("resultCount").textContent = `${filtered.length} / ${this.items.length} 件表示`;
+    const filterBadgeText =
+      this.searchFilters.length > 0 ? `（追い打ち ${this.searchFilters.length}件適用中）` : "";
+    document.getElementById("resultCount").textContent = `${filtered.length} / ${this.items.length} 件表示${filterBadgeText}`;
 
     const grid = document.getElementById("archiveGrid");
     grid.innerHTML = "";
