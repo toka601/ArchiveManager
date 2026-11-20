@@ -18,6 +18,7 @@
           placeholder="セーブデータタイトルを入力..."
           aria-label="セーブデータタイトル"
           title="現在のアーカイブ（セーブデータ）のタイトルを入力できます"
+          autocomplete="off"
         />
       </div>
       <span id="folderStatusBadge" class="status-badge status-virtual" title="画像の保存先状態">
@@ -169,15 +170,21 @@
           </div>
         </div>
 
-        <!-- 画像登録（ドラッグ&ドロップ・連番管理） -->
+        <!-- 画像登録（ドラッグ&ドロップ・連番管理・既存画像の再利用） -->
         <div class="form-group">
-          <label>画像（複数可能・ドラッグ＆ドロップ対応）</label>
+          <label>画像（複数可能・ドラッグ＆ドロップ / 既存画像から選択）</label>
           <div id="dropZone" class="drop-zone" tabindex="0">
             <input type="file" id="fileInput" accept="image/*" multiple hidden />
             <p class="drop-zone-text">
-              ここに画像をドラッグ＆ドロップ<br />
+              ここに新しい画像をドラッグ＆ドロップ<br />
               <span>またはクリックしてファイルを選択（自動で img1, img2... として保存）</span>
             </p>
+          </div>
+          <div class="image-picker-toolbar">
+            <button type="button" id="openExistingImageBtn" class="btn btn-secondary btn-sm">
+              📂 imagesフォルダから既存画像を選択
+            </button>
+            <span class="image-picker-hint">※すでに登録済みの画像を複製せずに再利用できます</span>
           </div>
           <div id="imagePreviewList" class="image-preview-list"></div>
         </div>
@@ -193,6 +200,64 @@
           <button type="submit" class="btn btn-primary">保存する</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- 既存画像選択モーダル（imagesフォルダ内から選択） -->
+  <div id="existingImageModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="existingImageTitle">
+    <div class="modal-backdrop" data-close="existingImageModal"></div>
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h2 id="existingImageTitle">📂 imagesフォルダ内の画像から選択</h2>
+        <button class="btn-close" data-close="existingImageModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="existing-image-toolbar">
+          <span id="existingImageSourceLabel" class="section-desc">参照先: images/</span>
+          <input
+            type="text"
+            id="existingImageFilterInput"
+            class="existing-image-filter"
+            placeholder="ファイル名で絞り込み（例: img1）..."
+            autocomplete="off"
+          />
+        </div>
+        <div id="existingImageGrid" class="existing-image-grid"></div>
+      </div>
+      <div class="modal-footer">
+        <span id="existingSelectedCount" class="existing-selected-count">0 枚選択中</span>
+        <button type="button" class="btn btn-secondary" data-close="existingImageModal">キャンセル</button>
+        <button type="button" id="confirmExistingImageBtn" class="btn btn-primary">選択した画像を追加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 連携フォルダ再指定モーダル（JSONロード時などに自動接続できない場合） -->
+  <div id="relinkFolderModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="relinkFolderTitle">
+    <div class="modal-backdrop" id="relinkFolderBackdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="relinkFolderTitle">📁 連携フォルダの再指定</h2>
+      </div>
+      <div class="modal-body">
+        <p class="section-desc">
+          ロードしたデータには連携フォルダが記録されていますが、ブラウザのセキュリティ制限（再読み込み後の権限リセット）または別環境での読み込みのため、自動接続できませんでした。
+        </p>
+        <div class="relink-target-box">
+          記録されていたフォルダ名: <strong id="relinkTargetFolderName">未指定</strong>
+        </div>
+        <p class="section-desc">
+          画像（<code>images/</code>）を正しく表示・管理するため、対象のフォルダを選択し直してください。
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="relinkUseBrowserStorageBtn" class="btn btn-secondary">
+          ブラウザ内ストレージを使用
+        </button>
+        <button type="button" id="relinkSelectFolderBtn" class="btn btn-primary">
+          📁 連携フォルダを選択し直す
+        </button>
+      </div>
     </div>
   </div>
 
