@@ -135,28 +135,28 @@
         <h2 id="editModalTitle">新規データの登録</h2>
         <button class="btn-close" data-close="editModal">✕</button>
       </div>
-      <form id="archiveForm" class="modal-body">
+      <form id="archiveForm" class="modal-body" autocomplete="off">
         <input type="hidden" id="itemId" />
 
         <div class="form-grid">
           <div class="form-group">
             <label for="itemTitle">タイトル <span class="required">*</span></label>
-            <input type="text" id="itemTitle" required placeholder="作品・アイテムのタイトル" />
+            <input type="text" id="itemTitle" required placeholder="作品・アイテムのタイトル" autocomplete="off" />
           </div>
 
           <div class="form-group">
             <label for="itemSeries">シリーズ</label>
-            <input type="text" id="itemSeries" placeholder="シリーズ名（任意）" />
+            <input type="text" id="itemSeries" placeholder="シリーズ名（任意）" autocomplete="off" />
           </div>
 
           <div class="form-group">
             <label for="itemAuthor">作者</label>
-            <input type="text" id="itemAuthor" placeholder="作者・制作者名" />
+            <input type="text" id="itemAuthor" placeholder="作者・制作者名" autocomplete="off" />
           </div>
 
           <div class="form-group">
             <label for="itemUrl">URL</label>
-            <input type="url" id="itemUrl" placeholder="https://example.com" />
+            <input type="url" id="itemUrl" placeholder="https://example.com" autocomplete="off" />
           </div>
         </div>
 
@@ -165,7 +165,7 @@
           <label for="tagInput">タグ（Enter または カンマ で追加）</label>
           <div class="tag-input-container" id="tagContainer">
             <div id="tagChips" class="tag-chips"></div>
-            <input type="text" id="tagInput" placeholder="タグを入力..." />
+            <input type="text" id="tagInput" placeholder="タグを入力..." autocomplete="off" />
           </div>
         </div>
 
@@ -185,7 +185,7 @@
         <!-- 説明文兼メモ -->
         <div class="form-group">
           <label for="itemMemo">説明文兼メモ</label>
-          <textarea id="itemMemo" rows="4" placeholder="あらすじ、感想、管理メモなど"></textarea>
+          <textarea id="itemMemo" rows="4" placeholder="あらすじ、感想、管理メモなど" autocomplete="off"></textarea>
         </div>
 
         <div class="modal-footer">
