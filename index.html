@@ -25,8 +25,8 @@
       </span>
     </div>
     <div class="header-actions">
-      <button id="selectFolderBtn" class="btn btn-secondary" title="PC内のフォルダを選択してimagesフォルダに実ファイルを保存します">
-        📁 画像フォルダ連携
+      <button id="selectFolderBtn" class="btn btn-secondary" title="PC内のフォルダを選択して画像(images/)やJSONファイルを保存します">
+        📁 連携フォルダ
       </button>
       <button id="openSaveLoadBtn" class="btn btn-secondary">
         💾 セーブ / ロード
@@ -40,6 +40,15 @@
   <main class="container">
     <!-- 検索エリア -->
     <section class="search-panel" aria-label="検索フィルター">
+      <!-- 追い打ち検索で確定した既存の絞り込み条件（search-panel 最上部） -->
+      <div id="activeFiltersArea" class="active-filters-area hidden">
+        <div class="active-filters-header">
+          <span class="active-filters-label">🔍 絞り込み中の条件（すべて満たすものを表示）:</span>
+          <button type="button" id="clearAllFiltersBtn" class="btn-clear-filters">すべて解除</button>
+        </div>
+        <div id="activeFilterChips" class="active-filter-chips"></div>
+      </div>
+
       <div class="search-blocks">
         <!-- ブロック1: 検索対象 -->
         <div class="search-block">
@@ -89,14 +98,26 @@
               placeholder="例: SF (アクション OR 冒険) -ホラー"
               autocomplete="off"
             />
-            <button id="clearSearchBtn" class="btn-icon" title="クリア">✕</button>
+            <button id="clearSearchBtn" class="btn-icon" title="入力をクリア">✕</button>
           </div>
+        </div>
+
+        <!-- 追い打ち検索ボタン -->
+        <div class="search-block search-block-drill">
+          <button
+            type="button"
+            id="drillDownSearchBtn"
+            class="btn btn-primary btn-drill-down"
+            title="現在の検索条件を確定し、絞り込まれた結果に対してさらに別の条件で絞り込みます"
+          >
+            ➕ 追い打ち検索
+          </button>
         </div>
       </div>
 
       <div class="search-meta">
         <span class="search-hint">
-          論理演算: スペースで <code>AND</code> / <code>OR</code> / <code>-除外</code> / <code>( )</code> が利用可能（左の「ビジュアル検索」からも作成できます）
+          論理演算: スペースで <code>AND</code> / <code>OR</code> / <code>-除外</code> / <code>( )</code> が利用可能（別項目も重ねて絞る場合は「追い打ち検索」）
         </span>
         <span id="resultCount" class="result-count">0 件表示</span>
       </div>
@@ -213,7 +234,9 @@
         <!-- ファイル書き出し・読み込み -->
         <div class="file-io-box">
           <h3>外部ファイル（JSON）でのセーブ / ロード</h3>
-          <p class="section-desc">バックアップや別環境へのデータ移行に使用します（タイトル・画像ファイル名情報・連番カウンターも保持されます）。</p>
+          <p class="section-desc">
+            バックアップやデータ移行に使用します。連携フォルダが有効な場合は、指定フォルダ直下（imagesと同階層）に直接JSONファイルが保存されます。
+          </p>
           <div class="file-io-actions">
             <button id="exportJsonBtn" class="btn btn-secondary">⬇ JSONファイルにセーブ</button>
             <label class="btn btn-secondary file-label">
