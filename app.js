@@ -91,6 +91,19 @@ class ImageStorageManager {
     this.clearUrlCache();
   }
 
+  // ブラウザ内ストレージ（IndexedDB の images ストア）の画像をすべて削除
+  async clearBrowserImages() {
+    this.clearUrlCache();
+    if (!this.db) return;
+    await new Promise((resolve, reject) => {
+      const tx = this.db.transaction("images", "readwrite");
+      const store = tx.objectStore("images");
+      store.clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = (e) => reject(e);
+    });
+  }
+
   // セーブデータ記録用のフォルダ情報を取得
   getLinkedFolderMeta() {
     if (!this.isFolderConnected()) return null;
@@ -335,6 +348,9 @@ class ArchiveApp {
     // 既存画像選択ピッカー用の一時状態
     this.availableExistingImages = [];
     this.selectedExistingSet = new Set();
+
+    // 独自確認モーダル用リゾルバ
+    this.confirmResolver = null;
   }
 
   async init() {
@@ -354,6 +370,57 @@ class ArchiveApp {
     this.updateFolderStatusUI();
     this.renderActiveFilters();
     await this.renderGrid();
+  }
+
+  // 独自確認モーダルを表示してユーザーの選択結果（true / false）を返す
+  showConfirm({
+    title = "確認",
+    message = "",
+    confirmText = "OK",
+    cancelText = "キャンセル",
+    isDanger = false,
+    hideCancel = false
+  }) {
+    return new Promise((resolve) => {
+      if (this.confirmResolver) {
+        this.confirmResolver(false);
+      }
+      this.confirmResolver = resolve;
+
+      document.getElementById("customConfirmTitle").textContent = title;
+      document.getElementById("customConfirmMessage").textContent = message;
+
+      const okBtn = document.getElementById("customConfirmOkBtn");
+      const cancelBtn = document.getElementById("customConfirmCancelBtn");
+
+      okBtn.textContent = confirmText;
+      okBtn.className = isDanger ? "btn btn-danger" : "btn btn-primary";
+
+      cancelBtn.textContent = cancelText;
+      cancelBtn.style.display = hideCancel ? "none" : "inline-flex";
+
+      this.openModal("customConfirmModal");
+      okBtn.focus();
+    });
+  }
+
+  // 独自通知モーダル（OKのみ）
+  showNotice(title, message) {
+    return this.showConfirm({
+      title,
+      message,
+      confirmText: "閉じる",
+      hideCancel: true
+    });
+  }
+
+  resolveConfirm(result) {
+    this.closeModal("customConfirmModal");
+    if (this.confirmResolver) {
+      const resolver = this.confirmResolver;
+      this.confirmResolver = null;
+      resolver(result);
+    }
   }
 
   // 既存データ内の "img数字" の最大値を確認し、カウンターが重複しないよう保証
@@ -457,8 +524,64 @@ class ArchiveApp {
     this.openModal("relinkFolderModal");
   }
 
+  // 今開いているデータ（セーブスロットを除く作業ストレージ・連携フォルダ・一覧）を空にする
+  async resetCurrentData() {
+    const ok = await this.showConfirm({
+      title: "今開いているデータを空にする",
+      message:
+        "現在開いている一覧データ・タイトル・検索条件・連携フォルダの接続・ブラウザ内画像ストレージをすべて消去して初期状態に戻します。\n\n※SLOT 1〜10 のセーブデータや、PC上の連携フォルダ内の実ファイルは削除されません。",
+      confirmText: "空にする",
+      isDanger: true
+    });
+    if (!ok) return;
+
+    this.storage.disconnectFolder();
+    await this.storage.clearBrowserImages();
+
+    this.archiveTitle = "";
+    this.items = [];
+    this.imageCounter = 1;
+    this.searchFilters = [];
+    this.currentTags = [];
+    this.currentImages = [];
+    this.activeDetailId = null;
+
+    document.getElementById("searchTarget").value = "all";
+    document.getElementById("searchMatchType").value = "partial";
+    document.getElementById("searchWord").value = "";
+
+    this.syncArchiveTitleUI();
+    this.updateFolderStatusUI();
+    this.renderActiveFilters();
+    this.autoSave();
+
+    await this.renderGrid();
+    this.closeModal("saveLoadModal");
+    this.showToast("今開いているデータを空にしました");
+  }
+
   // イベント登録
   bindEvents() {
+    // 独自確認モーダル内のイベント
+    document.getElementById("customConfirmOkBtn").addEventListener("click", () => {
+      this.resolveConfirm(true);
+    });
+    document.getElementById("customConfirmCancelBtn").addEventListener("click", () => {
+      this.resolveConfirm(false);
+    });
+    document.getElementById("customConfirmCloseBtn").addEventListener("click", () => {
+      this.resolveConfirm(false);
+    });
+    document.getElementById("customConfirmBackdrop").addEventListener("click", () => {
+      this.resolveConfirm(false);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && this.confirmResolver) {
+        e.preventDefault();
+        this.resolveConfirm(false);
+      }
+    });
+
     // ヘッダーのセーブデータタイトル入力
     const archiveTitleInput = document.getElementById("archiveTitleInput");
     if (archiveTitleInput) {
@@ -501,7 +624,7 @@ class ArchiveApp {
         await this.renderGrid();
       } catch (err) {
         if (err.name === "AbortError") return;
-        alert(err.message);
+        await this.showNotice("連携フォルダのエラー", err.message);
       }
     });
 
@@ -516,7 +639,7 @@ class ArchiveApp {
         await this.renderGrid();
       } catch (err) {
         if (err.name === "AbortError") return;
-        alert(err.message);
+        await this.showNotice("連携フォルダのエラー", err.message);
       }
     });
 
@@ -538,6 +661,11 @@ class ArchiveApp {
     document.getElementById("openSaveLoadBtn").addEventListener("click", () => {
       this.renderSaveSlots();
       this.openModal("saveLoadModal");
+    });
+
+    // 今開いているデータを空にするボタン
+    document.getElementById("resetCurrentDataBtn").addEventListener("click", async () => {
+      await this.resetCurrentData();
     });
 
     // モーダル閉じる共通処理
@@ -681,7 +809,7 @@ class ArchiveApp {
         this.renderSaveSlots();
         this.showToast(`「${file.name}」からロードしました`);
       } catch (err) {
-        alert("ファイルの読み込みに失敗しました: " + err.message);
+        await this.showNotice("ファイルの読み込みエラー", "ファイルの読み込みに失敗しました:\n" + err.message);
       } finally {
         e.target.value = "";
       }
@@ -857,7 +985,6 @@ class ArchiveApp {
       return;
     }
 
-    // すでに images/ フォルダにある最大番号も考慮して重複を回避
     const existing = await this.storage.listAvailableImages();
     for (const fname of existing) {
       const m = fname.match(/^img(\d+)/i);
@@ -989,11 +1116,18 @@ class ArchiveApp {
     await this.renderGrid();
   }
 
-  // データの削除
+  // データの削除（独自確認モーダル使用）
   async deleteItem(id) {
     const target = this.items.find((x) => x.id === id);
     if (!target) return false;
-    if (!confirm(`「${target.title}」を削除してもよろしいですか？`)) return false;
+
+    const ok = await this.showConfirm({
+      title: "データの削除",
+      message: `「${target.title}」を削除してもよろしいですか？\nこの操作は取り消せません。`,
+      confirmText: "削除する",
+      isDanger: true
+    });
+    if (!ok) return false;
 
     this.items = this.items.filter((x) => x.id !== id);
     this.autoSave();
@@ -1196,9 +1330,17 @@ class ArchiveApp {
         </div>
       `;
 
-      // セーブ実行
-      card.querySelector(".btn-slot-save").addEventListener("click", () => {
-        if (data && !confirm(`SLOT ${slotNum} の既存データに上書きセーブしますか？`)) return;
+      // セーブ実行（独自確認モーダル使用）
+      card.querySelector(".btn-slot-save").addEventListener("click", async () => {
+        if (data) {
+          const ok = await this.showConfirm({
+            title: `SLOT ${slotNum} への上書きセーブ`,
+            message: `SLOT ${slotNum}${data.title ? `（${data.title}）` : ""} にはすでにデータが保存されています。\n現在の内容で上書きセーブしますか？`,
+            confirmText: "上書きセーブ",
+            isDanger: false
+          });
+          if (!ok) return;
+        }
         const currentSlots = this.getSaveSlots();
         currentSlots[slotKey] = this.createSavePayload();
         this.saveSlotsToStorage(currentSlots);
@@ -1206,19 +1348,32 @@ class ArchiveApp {
         this.showToast(`SLOT ${slotNum} にセーブしました`);
       });
 
-      // ロード実行
+      // ロード・クリア実行（独自確認モーダル使用）
       if (data) {
         card.querySelector(".btn-slot-load").addEventListener("click", async () => {
-          if (!confirm(`SLOT ${slotNum} のデータをロードしますか？（現在の未セーブ状態は上書きされます）`)) return;
+          const ok = await this.showConfirm({
+            title: `SLOT ${slotNum} のロード`,
+            message: `SLOT ${slotNum}${data.title ? `（${data.title}）` : ""} のデータをロードしますか？\n現在開いている未セーブの状態は上書きされます。`,
+            confirmText: "ロードする",
+            isDanger: false
+          });
+          if (!ok) return;
+
           this.closeModal("saveLoadModal");
           await this.applySavePayload(data, true);
           await this.renderGrid();
           this.showToast(`SLOT ${slotNum} からロードしました`);
         });
 
-        // クリア実行（スロットを初期状態に上書き・削除）
-        card.querySelector(".btn-slot-clear").addEventListener("click", () => {
-          if (!confirm(`SLOT ${slotNum} のセーブデータを削除して初期状態（空きスロット）に戻しますか？`)) return;
+        card.querySelector(".btn-slot-clear").addEventListener("click", async () => {
+          const ok = await this.showConfirm({
+            title: `SLOT ${slotNum} のクリア`,
+            message: `SLOT ${slotNum}${data.title ? `（${data.title}）` : ""} のセーブデータを削除し、空きスロットに戻しますか？`,
+            confirmText: "クリアする",
+            isDanger: true
+          });
+          if (!ok) return;
+
           const currentSlots = this.getSaveSlots();
           delete currentSlots[slotKey];
           this.saveSlotsToStorage(currentSlots);
