@@ -9,7 +9,17 @@
 <body>
   <header class="app-header">
     <div class="header-left">
-      <h1>📚 Archive Manager</h1>
+      <div class="app-brand">
+        <h1>📚 Archive Manager</h1>
+        <button
+          type="button"
+          id="openVersionModalBtn"
+          class="version-badge-btn"
+          title="バージョン情報・更新履歴を表示します"
+        >
+          v1.6.0
+        </button>
+      </div>
       <div class="archive-title-box">
         <input
           type="text"
@@ -156,14 +166,22 @@
           </div>
         </div>
 
-        <!-- URL入力（複数可能・代表選択） -->
+        <!-- URL入力（複数可能・ラベル付き・代表選択） -->
         <div class="form-group">
-          <label for="urlInput">URL（複数登録可能・代表リンクを選択）</label>
+          <label for="urlInput">URL（複数登録可能・ラベルと代表リンクを設定）</label>
           <div class="url-add-row">
+            <input
+              type="text"
+              id="urlLabelInput"
+              class="url-label-add-input"
+              placeholder="ラベル (例: 公式, SNS)"
+              autocomplete="off"
+            />
             <input
               type="url"
               id="urlInput"
-              placeholder="https://example.com（Enter または「追加」で登録）"
+              class="url-value-add-input"
+              placeholder="https://example.com"
               autocomplete="off"
             />
             <button type="button" id="addUrlBtn" class="btn btn-secondary">＋ 追加</button>
@@ -351,6 +369,27 @@
             🗑️ 今開いているデータを空にする
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- バージョン情報・更新履歴モーダル -->
+  <div id="versionModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="versionModalTitle">
+    <div class="modal-backdrop" data-close="versionModal"></div>
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h2 id="versionModalTitle">📌 バージョン情報・更新履歴</h2>
+        <button class="btn-close" data-close="versionModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="version-current-banner">
+          <span>現在のバージョン:</span>
+          <strong id="appCurrentVersionText">v1.6.0</strong>
+        </div>
+        <div id="versionHistoryList" class="version-history-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close="versionModal">閉じる</button>
       </div>
     </div>
   </div>
