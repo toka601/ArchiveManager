@@ -306,6 +306,71 @@ class ImageStorageManager {
  * アーカイブアプリケーション本体
  */
 class ArchiveApp {
+  // ▼ アプリバージョン情報・更新履歴（新しい順）
+  static APP_VERSION = "v1.6.0";
+
+  static VERSION_HISTORY = [
+    {
+      version: "v1.6.0",
+      title: "URLごとのラベル設定・バージョン履歴表示を追加",
+      changes: [
+        "複数登録できるURLの1つ1つに一対の「ラベル」を設定・編集できるようにしました。",
+        "代表URLにラベルが設定されている場合、一覧カードのリンク文字にそのラベル名を表示するようにしました。",
+        "ヘッダーにバージョンボタンを追加し、これまでの更新履歴をポップアップで確認できるようにしました。"
+      ]
+    },
+    {
+      version: "v1.5.0",
+      title: "複数URL登録・代表URL選択・リンク操作の分離",
+      changes: [
+        "1つのデータに対して複数のURLを登録し、カードリンクに使用する代表URL（★）を選択できるようにしました。",
+        "リンクの「🔗」マーク押下でURLコピー、文字押下でリンク先へ遷移する仕様に分離しました。"
+      ]
+    },
+    {
+      version: "v1.4.0",
+      title: "作業データのリセット機能と独自確認ダイアログの導入",
+      changes: [
+        "セーブ/ロード画面に「今開いているデータを空にする」ボタンを追加し、セーブスロットを残したまま作業領域や連携状態を初期化できるようにしました。",
+        "ブラウザ標準のアラートを廃止し、アプリデザインに統一した独自の確認モーダルを導入しました。"
+      ]
+    },
+    {
+      version: "v1.3.0",
+      title: "連携フォルダ再指定と既存画像の番号範囲ピッカー",
+      changes: [
+        "JSONロード時にフォルダ権限の再確認が必要な場合、その場で連携フォルダを選び直せるダイアログを追加しました。",
+        "imagesフォルダ内の既存画像を再利用できるピッカーを追加し、番号範囲（最小〜最大）での絞り込みとスクロール表示に対応しました。",
+        "登録・編集フォームの入力履歴サジェストを抑制しました。"
+      ]
+    },
+    {
+      version: "v1.2.0",
+      title: "追い打ち検索と連携フォルダ直下へのJSON出力",
+      changes: [
+        "絞り込み結果に対してさらに別条件を重ねられる「追い打ち検索」と適用条件チップ表示を追加しました。",
+        "連携フォルダ有効時、JSONファイルを指定フォルダ直下（imagesと同階層）へ直接書き出すようにしました。"
+      ]
+    },
+    {
+      version: "v1.1.0",
+      title: "セーブデータタイトル・10スロット化・クリア機能",
+      changes: [
+        "ヘッダーからアーカイブ全体にセーブデータタイトルを付けられるようにしました。",
+        "セーブスロットを10枠に拡張し、各スロットを空き状態へ戻す「クリア」ボタンとレイアウト調整を実施しました。"
+      ]
+    },
+    {
+      version: "v1.0.0",
+      title: "Archive Manager 初期リリース",
+      changes: [
+        "作品・資料データの登録、編集、削除、詳細閲覧機能を実装しました。",
+        "論理演算検索（AND / OR / 除外 / 括弧）およびビジュアル検索ビルダーを搭載しました。",
+        "ローカルフォルダ連携（images/ 連番自動保存）とJSONセーブ/ロード機能を実装しました。"
+      ]
+    }
+  ];
+
   // ▼ セーブ設定（後々スロット数を増やす場合は slotCount を変更する）
   static SAVE_CONFIG = {
     slotCount: 10,
@@ -341,7 +406,7 @@ class ArchiveApp {
     this.searchFilters = []; // [{ target, matchType, word }, ...]
 
     // フォーム編集用の一時状態
-    this.currentUrls = [];
+    this.currentUrls = []; // [{ label: string, url: string }, ...]
     this.currentPrimaryUrlIndex = 0;
     this.currentTags = [];
     this.currentImages = [];
@@ -367,6 +432,7 @@ class ArchiveApp {
       document.body
     );
 
+    this.syncVersionUI();
     this.syncImageCounterWithData();
     this.syncArchiveTitleUI();
     this.updateFolderStatusUI();
@@ -374,13 +440,61 @@ class ArchiveApp {
     await this.renderGrid();
   }
 
-  // 単一URL（旧形式）と複数URL（新形式）を正規化する
+  // バージョン表示と履歴モーダルの内容を同期
+  syncVersionUI() {
+    const badgeBtn = document.getElementById("openVersionModalBtn");
+    if (badgeBtn) {
+      badgeBtn.textContent = ArchiveApp.APP_VERSION;
+    }
+    const currentText = document.getElementById("appCurrentVersionText");
+    if (currentText) {
+      currentText.textContent = ArchiveApp.APP_VERSION;
+    }
+  }
+
+  renderVersionHistory() {
+    const container = document.getElementById("versionHistoryList");
+    if (!container) return;
+    container.innerHTML = "";
+
+    ArchiveApp.VERSION_HISTORY.forEach((entry, index) => {
+      const card = document.createElement("div");
+      card.className = "version-entry" + (index === 0 ? " is-latest" : "");
+      const changesHtml = (entry.changes || [])
+        .map((line) => `<li>${this.escapeHtml(line)}</li>`)
+        .join("");
+
+      card.innerHTML = `
+        <div class="version-entry-header">
+          <span class="version-tag">${this.escapeHtml(entry.version)}</span>
+          <span class="version-entry-title">${this.escapeHtml(entry.title)}</span>
+        </div>
+        <ul class="version-changes">${changesHtml}</ul>
+      `;
+      container.appendChild(card);
+    });
+  }
+
+  // 単一URL（旧形式）・文字列配列（旧複数形式）・オブジェクト配列（ラベル付き新形式）を正規化する
   normalizeItemUrls(item) {
     let urls = [];
     if (Array.isArray(item.urls)) {
-      urls = item.urls.map((u) => String(u || "").trim()).filter((u) => u !== "");
+      urls = item.urls
+        .map((entry) => {
+          if (typeof entry === "string") {
+            return { label: "", url: entry.trim() };
+          }
+          if (entry && typeof entry === "object") {
+            return {
+              label: typeof entry.label === "string" ? entry.label.trim() : "",
+              url: typeof entry.url === "string" ? entry.url.trim() : ""
+            };
+          }
+          return { label: "", url: "" };
+        })
+        .filter((entry) => entry.url !== "");
     } else if (typeof item.url === "string" && item.url.trim() !== "") {
-      urls = [item.url.trim()];
+      urls = [{ label: "", url: item.url.trim() }];
     }
 
     let primaryUrlIndex =
@@ -392,10 +506,13 @@ class ArchiveApp {
       primaryUrlIndex = 0;
     }
 
+    const primaryEntry = urls[primaryUrlIndex] || { label: "", url: "" };
+
     return {
       urls,
       primaryUrlIndex,
-      primaryUrl: urls[primaryUrlIndex] || ""
+      primaryUrl: primaryEntry.url,
+      primaryLabel: primaryEntry.label
     };
   }
 
@@ -409,6 +526,20 @@ class ArchiveApp {
         urls,
         primaryUrlIndex,
         url: primaryUrl
+      };
+    });
+  }
+
+  // 検索用オブジェクト配列を生成（ラベル名や2つ目以降のURLも検索対象に含める）
+  buildSearchableItems(items) {
+    return items.map((item) => {
+      const { urls } = this.normalizeItemUrls(item);
+      const combinedUrlSearchText = urls
+        .map((u) => [u.label, u.url].filter(Boolean).join(" "))
+        .join(" ");
+      return {
+        ...item,
+        url: combinedUrlSearchText
       };
     });
   }
@@ -634,6 +765,12 @@ class ArchiveApp {
 
   // イベント登録
   bindEvents() {
+    // バージョンボタン押下で更新履歴モーダルを開く
+    document.getElementById("openVersionModalBtn").addEventListener("click", () => {
+      this.renderVersionHistory();
+      this.openModal("versionModal");
+    });
+
     // 独自確認モーダル内のイベント
     document.getElementById("customConfirmOkBtn").addEventListener("click", () => {
       this.resolveConfirm(true);
@@ -747,14 +884,17 @@ class ArchiveApp {
       });
     });
 
-    // URL複数登録（Enter または 追加ボタン）
+    // URL複数登録（ラベル入力欄・URL入力欄でのEnter または 追加ボタン）
+    const urlLabelInput = document.getElementById("urlLabelInput");
     const urlInput = document.getElementById("urlInput");
-    urlInput.addEventListener("keydown", (e) => {
+    const handleUrlEnter = (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
         this.addUrlFromInput();
       }
-    });
+    };
+    urlLabelInput.addEventListener("keydown", handleUrlEnter);
+    urlInput.addEventListener("keydown", handleUrlEnter);
     document.getElementById("addUrlBtn").addEventListener("click", () => {
       this.addUrlFromInput();
     });
@@ -900,21 +1040,30 @@ class ArchiveApp {
     });
   }
 
-  // URL入力欄からリストへ追加（デフォルト代表はインデックス0）
+  // ラベル＋URL入力欄からリストへ追加（デフォルト代表はインデックス0）
   addUrlFromInput() {
-    const input = document.getElementById("urlInput");
-    const raw = input.value.trim();
-    if (!raw) return;
+    const labelInput = document.getElementById("urlLabelInput");
+    const urlInput = document.getElementById("urlInput");
+    const rawLabel = labelInput.value.trim();
+    const rawUrl = urlInput.value.trim();
 
-    this.currentUrls.push(raw);
+    if (!rawUrl) {
+      if (rawLabel) {
+        urlInput.focus();
+      }
+      return;
+    }
+
+    this.currentUrls.push({ label: rawLabel, url: rawUrl });
     if (this.currentUrls.length === 1) {
       this.currentPrimaryUrlIndex = 0;
     }
-    input.value = "";
+    labelInput.value = "";
+    urlInput.value = "";
     this.renderUrlList();
   }
 
-  // 登録済みURLリストを描画（代表URLの選択・直接編集・削除）
+  // 登録済みURLリストを描画（代表URLの選択・ラベル編集・URL編集・削除）
   renderUrlList() {
     const container = document.getElementById("urlItemList");
     container.innerHTML = "";
@@ -923,7 +1072,7 @@ class ArchiveApp {
       this.currentPrimaryUrlIndex = 0;
     }
 
-    this.currentUrls.forEach((url, index) => {
+    this.currentUrls.forEach((entry, index) => {
       const isPrimary = index === this.currentPrimaryUrlIndex;
 
       const row = document.createElement("div");
@@ -937,9 +1086,16 @@ class ArchiveApp {
           ${isPrimary ? "★ 代表" : "☆ 代表にする"}
         </button>
         <input
+          type="text"
+          class="url-item-label-input"
+          value="${this.escapeHtml(entry.label)}"
+          placeholder="ラベル (任意)"
+          autocomplete="off"
+        />
+        <input
           type="url"
           class="url-item-input"
-          value="${this.escapeHtml(url)}"
+          value="${this.escapeHtml(entry.url)}"
           placeholder="https://example.com"
           autocomplete="off"
         />
@@ -952,9 +1108,14 @@ class ArchiveApp {
         this.renderUrlList();
       });
 
+      // ラベルの直接編集
+      row.querySelector(".url-item-label-input").addEventListener("input", (e) => {
+        this.currentUrls[index].label = e.target.value;
+      });
+
       // URL文字列の直接編集
       row.querySelector(".url-item-input").addEventListener("input", (e) => {
-        this.currentUrls[index] = e.target.value;
+        this.currentUrls[index].url = e.target.value;
       });
 
       // URLの削除（削除後の代表インデックスを自動補正）
@@ -1226,11 +1387,12 @@ class ArchiveApp {
       document.getElementById("itemTitle").value = item.title || "";
       document.getElementById("itemSeries").value = item.series || "";
       document.getElementById("itemAuthor").value = item.author || "";
+      document.getElementById("urlLabelInput").value = "";
       document.getElementById("urlInput").value = "";
       document.getElementById("itemMemo").value = item.memo || "";
 
       const { urls, primaryUrlIndex } = this.normalizeItemUrls(item);
-      this.currentUrls = [...urls];
+      this.currentUrls = urls.map((u) => ({ ...u }));
       this.currentPrimaryUrlIndex = primaryUrlIndex;
       this.currentTags = Array.isArray(item.tags) ? [...item.tags] : [];
       this.currentImages = Array.isArray(item.images) ? [...item.images] : [];
@@ -1256,12 +1418,24 @@ class ArchiveApp {
     this.addTagFromInput();
 
     // 空文字のURL行を除外しつつ代表インデックスを保持
-    const rawPrimaryUrl = this.currentUrls[this.currentPrimaryUrlIndex] || "";
-    const cleanedUrls = this.currentUrls.map((u) => u.trim()).filter((u) => u !== "");
-    let nextPrimaryIndex = cleanedUrls.indexOf(rawPrimaryUrl.trim());
-    if (nextPrimaryIndex < 0) nextPrimaryIndex = 0;
+    const rawPrimaryEntry = this.currentUrls[this.currentPrimaryUrlIndex] || null;
+    const cleanedUrls = this.currentUrls
+      .map((entry) => ({
+        label: String(entry.label || "").trim(),
+        url: String(entry.url || "").trim()
+      }))
+      .filter((entry) => entry.url !== "");
 
-    const primaryUrl = cleanedUrls[nextPrimaryIndex] || "";
+    let nextPrimaryIndex = 0;
+    if (rawPrimaryEntry && rawPrimaryEntry.url.trim() !== "") {
+      const foundIdx = cleanedUrls.findIndex(
+        (entry) =>
+          entry.url === rawPrimaryEntry.url.trim() && entry.label === String(rawPrimaryEntry.label || "").trim()
+      );
+      if (foundIdx >= 0) nextPrimaryIndex = foundIdx;
+    }
+
+    const primaryUrl = cleanedUrls[nextPrimaryIndex]?.url || "";
 
     const id = document.getElementById("itemId").value;
     const itemData = {
@@ -1314,15 +1488,19 @@ class ArchiveApp {
 
   // 一覧の検索＆描画（追い打ち検索パイプライン ＋ 現在の入力欄）
   async renderGrid() {
-    let filtered = [...this.items];
+    let searchable = this.buildSearchableItems(this.items);
     for (const filter of this.searchFilters) {
-      filtered = Searcher.search(filtered, filter.word, filter.target, filter.matchType);
+      searchable = Searcher.search(searchable, filter.word, filter.target, filter.matchType);
     }
 
     const target = document.getElementById("searchTarget").value;
     const matchType = document.getElementById("searchMatchType").value;
     const searchWord = document.getElementById("searchWord").value;
-    filtered = Searcher.search(filtered, searchWord, target, matchType);
+    searchable = Searcher.search(searchable, searchWord, target, matchType);
+
+    // 検索結果のID集合から元のアイテム配列を抽出
+    const matchedIds = new Set(searchable.map((x) => x.id));
+    const filtered = this.items.filter((x) => matchedIds.has(x.id));
 
     const filterBadgeText =
       this.searchFilters.length > 0 ? `（追い打ち ${this.searchFilters.length}件適用中）` : "";
@@ -1347,11 +1525,16 @@ class ArchiveApp {
 
       const hasImages = Array.isArray(item.images) && item.images.length > 0;
       const thumbUrl = hasImages ? await this.storage.getImageUrl(item.images[0]) : null;
-      const { urls, primaryUrl } = this.normalizeItemUrls(item);
+      const { urls, primaryUrl, primaryLabel } = this.normalizeItemUrls(item);
 
       const tagsHtml = (item.tags || [])
         .map((t) => `<span class="tag-badge" data-tag="${this.escapeHtml(t)}">#${this.escapeHtml(t)}</span>`)
         .join("");
+
+      const linkDisplayText = primaryLabel || "リンク";
+      const allUrlsTooltip = urls
+        .map((u) => (u.label ? `[${u.label}] ${u.url}` : u.url))
+        .join("\n");
 
       const linkHtml = primaryUrl
         ? `
@@ -1369,8 +1552,12 @@ class ArchiveApp {
               rel="noopener noreferrer"
               class="card-link-text"
               title="${this.escapeHtml(primaryUrl)}"
-            >リンク</a>
-            ${urls.length > 1 ? `<span class="card-link-extra-badge">+${urls.length - 1}</span>` : ""}
+            >${this.escapeHtml(linkDisplayText)}</a>
+            ${
+              urls.length > 1
+                ? `<span class="card-link-extra-badge" title="${this.escapeHtml(allUrlsTooltip)}">+${urls.length - 1}</span>`
+                : ""
+            }
           </div>
         `
         : "";
@@ -1458,16 +1645,17 @@ class ArchiveApp {
         ? `<div class="detail-url-list">
             ${urls
               .map(
-                (u, idx) => `
+                (entry, idx) => `
                 <div class="detail-url-item">
                   ${idx === primaryUrlIndex ? `<span class="detail-url-primary-badge">★ 代表</span>` : ""}
+                  ${entry.label ? `<span class="detail-url-label-badge">${this.escapeHtml(entry.label)}</span>` : ""}
                   <button
                     type="button"
                     class="card-link-copy-btn detail-copy-url-btn"
-                    data-copy-url="${this.escapeHtml(u)}"
+                    data-copy-url="${this.escapeHtml(entry.url)}"
                     title="マークをクリックしてURLをコピー"
                   >🔗</button>
-                  <a href="${this.escapeHtml(u)}" target="_blank" rel="noopener noreferrer" class="detail-url-text">${this.escapeHtml(u)}</a>
+                  <a href="${this.escapeHtml(entry.url)}" target="_blank" rel="noopener noreferrer" class="detail-url-text">${this.escapeHtml(entry.url)}</a>
                 </div>
               `
               )
