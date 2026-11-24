@@ -1371,3 +1371,155 @@ textarea:focus {
   text-decoration: underline;
   color: #93c5fd;
 }
+
+/* ヘッダーのブランド＆バージョンボタン */
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.version-badge-btn {
+  background-color: rgba(59, 130, 246, 0.14);
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  color: #93c5fd;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.version-badge-btn:hover {
+  background-color: rgba(59, 130, 246, 0.28);
+  border-color: var(--primary);
+  color: #ffffff;
+}
+
+/* URLラベル入力＆一覧表示の調整 */
+.url-label-add-input {
+  width: 190px !important;
+  flex: 0 0 190px !important;
+}
+
+.url-value-add-input {
+  flex: 1 !important;
+  min-width: 0;
+}
+
+.url-item-label-input {
+  width: 150px !important;
+  flex: 0 0 150px !important;
+  background-color: rgba(15, 23, 42, 0.75) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 6px !important;
+  padding: 0.25rem 0.5rem !important;
+  font-size: 0.84rem !important;
+  font-weight: 600;
+  color: #93c5fd !important;
+}
+
+.url-item-label-input:focus {
+  border-color: var(--primary) !important;
+}
+
+@media (max-width: 640px) {
+  .url-add-row,
+  .url-item-row {
+    flex-wrap: wrap;
+  }
+  .url-label-add-input,
+  .url-item-label-input {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+}
+
+.detail-url-label-badge {
+  font-size: 0.74rem;
+  font-weight: 700;
+  background-color: rgba(59, 130, 246, 0.16);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  color: #93c5fd;
+  padding: 0.1rem 0.5rem;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+
+/* バージョン履歴モーダル */
+.version-current-banner {
+  background-color: var(--bg-input);
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.92rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.version-current-banner strong {
+  color: #93c5fd;
+  font-size: 1.02rem;
+}
+
+.version-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  max-height: 55vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.version-entry {
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+}
+
+.version-entry.is-latest {
+  border-color: rgba(59, 130, 246, 0.55);
+}
+
+.version-entry-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.5rem;
+}
+
+.version-tag {
+  background-color: var(--primary);
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.12rem 0.55rem;
+  border-radius: 6px;
+}
+
+.version-entry:not(.is-latest) .version-tag {
+  background-color: rgba(148, 163, 184, 0.2);
+  color: var(--text-main);
+}
+
+.version-entry-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.version-changes {
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.86rem;
+  color: #cbd5e1;
+}
