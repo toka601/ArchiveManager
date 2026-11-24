@@ -1,3 +1,5 @@
+const { version } = require("react");
+
 /**
  * 画像ストレージ管理クラス
  * - フォルダ連携中: 指定フォルダ内の "images/" のみで画像を管理（ブラウザ内ストレージへは複製しない）
@@ -307,9 +309,17 @@ class ImageStorageManager {
  */
 class ArchiveApp {
   // ▼ アプリバージョン情報・更新履歴（新しい順）
-  static APP_VERSION = "v1.6.0";
+  static APP_VERSION = "v1.7.0";
 
   static VERSION_HISTORY = [
+    {
+      version: "v1.7.0",
+      title: "JSONエクスポートのファイル名変更",
+      changes: [
+        "JSONエクスポートのファイル名を「archive_<セーブデータタイトル>_<日付(例: 2021-01-01)>.json」から「archive_<セーブデータタイトル>_<日付(例: 20210101)>_<時刻(例: 1501)>.json」へ。",
+        "時刻の指定により、同じ日付でも上書きにならない。"
+      ]
+    },
     {
       version: "v1.6.0",
       title: "URLごとのラベル設定・バージョン履歴表示を追加",
@@ -994,11 +1004,20 @@ class ArchiveApp {
     document.getElementById("exportJsonBtn").addEventListener("click", async () => {
       const payload = this.createSavePayload();
       const jsonStr = JSON.stringify(payload, null, 2);
-      const timestamp = new Date().toISOString().slice(0, 10);
+
+      const now = new Date();
+      const yyyy = String(now.getFullYear());
+      const mm = String(now.getMonth() + 1).padStart(2, "0");
+      const dd = String(now.getDate()).padStart(2, "0");
+      const hh = String(now.getHours()).padStart(2, "0");
+      const min = String(now.getMinutes()).padStart(2, "0");
+
+      const dateStr = `${yyyy}${mm}${dd}`;
+      const timeStr = `${hh}${min}`;
       const safeTitle = payload.title
         ? payload.title.replace(/[\\/:*?"<>|]/g, "_")
         : "save";
-      const exportFilename = `archive_${safeTitle}_${timestamp}.json`;
+      const exportFilename = `archive_${safeTitle}_${dateStr}_${timeStr}.json`;
 
       if (this.storage.isFolderConnected()) {
         try {
