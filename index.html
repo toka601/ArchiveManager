@@ -415,25 +415,29 @@
   <!-- トースト通知 -->
   <div id="toast" class="toast hidden"></div>
 
-  <!-- 検索エンジン -->
-  <script src="searcher.js"></script>
 
   <!-- ビジュアル検索モジュール -->
-  <script src="visual-search/config.js"></script>
-  <script src="visual-search/data.js"></script>
-  <script src="visual-search/render/block.js"></script>
-  <script src="visual-search/render/result.js"></script>
-  <script src="visual-search/render/canvas.js"></script>
-  <script src="visual-search/render/blocklist.js"></script>
-  <script src="visual-search/render/tips.js"></script>
-  <script src="visual-search/query.js"></script>
-  <script src="visual-search/controller.js"></script>
-  <script src="visual-search/visualSearch.js"></script>
+  <script src="app/visual-search/config.js"></script>
+  <script src="app/visual-search/data.js"></script>
+  <script src="app/visual-search/render/block.js"></script>
+  <script src="app/visual-search/render/result.js"></script>
+  <script src="app/visual-search/render/canvas.js"></script>
+  <script src="app/visual-search/render/blocklist.js"></script>
+  <script src="app/visual-search/render/tips.js"></script>
+  <script src="app/visual-search/query.js"></script>
+  <script src="app/visual-search/controller.js"></script>
+  <script src="app/visual-search/visualSearch.js"></script>
 
   <!-- アプリ本体モジュール -->
+  <!-- 1. 独立した基盤モジュール（定数・ストレージ・検索エンジン） -->
   <script src="app/config.js"></script>
   <script src="app/storage.js"></script>
+  <script src="app/searcher.js"></script>
+  
+  <!-- 2. アプリ本体クラス定義 -->
   <script src="app/main.js"></script>
+
+  <!-- 3. ArchiveApp への機能追加（prototype拡張） -->
   <script src="app/ui-dialog.js"></script>
   <script src="app/form-editor.js"></script>
   <script src="app/grid-detail.js"></script>
