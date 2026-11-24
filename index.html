@@ -17,7 +17,7 @@
           class="version-badge-btn"
           title="バージョン情報・更新履歴を表示します"
         >
-          v1.6.0
+          v1.7.0
         </button>
       </div>
       <div class="archive-title-box">
@@ -384,7 +384,7 @@
       <div class="modal-body">
         <div class="version-current-banner">
           <span>現在のバージョン:</span>
-          <strong id="appCurrentVersionText">v1.6.0</strong>
+          <strong id="appCurrentVersionText">v1.7.0</strong>
         </div>
         <div id="versionHistoryList" class="version-history-list"></div>
       </div>
@@ -430,7 +430,13 @@
   <script src="visual-search/controller.js"></script>
   <script src="visual-search/visualSearch.js"></script>
 
-  <!-- アプリ本体 -->
-  <script src="app.js"></script>
+  <!-- アプリ本体モジュール -->
+  <script src="app/config.js"></script>
+  <script src="app/storage.js"></script>
+  <script src="app/main.js"></script>
+  <script src="app/ui-dialog.js"></script>
+  <script src="app/form-editor.js"></script>
+  <script src="app/grid-detail.js"></script>
+  <script src="app/save-load.js"></script>
 </body>
 </html>
