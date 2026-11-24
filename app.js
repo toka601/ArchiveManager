@@ -341,6 +341,8 @@ class ArchiveApp {
     this.searchFilters = []; // [{ target, matchType, word }, ...]
 
     // フォーム編集用の一時状態
+    this.currentUrls = [];
+    this.currentPrimaryUrlIndex = 0;
     this.currentTags = [];
     this.currentImages = [];
     this.activeDetailId = null;
@@ -370,6 +372,74 @@ class ArchiveApp {
     this.updateFolderStatusUI();
     this.renderActiveFilters();
     await this.renderGrid();
+  }
+
+  // 単一URL（旧形式）と複数URL（新形式）を正規化する
+  normalizeItemUrls(item) {
+    let urls = [];
+    if (Array.isArray(item.urls)) {
+      urls = item.urls.map((u) => String(u || "").trim()).filter((u) => u !== "");
+    } else if (typeof item.url === "string" && item.url.trim() !== "") {
+      urls = [item.url.trim()];
+    }
+
+    let primaryUrlIndex =
+      typeof item.primaryUrlIndex === "number" && Number.isInteger(item.primaryUrlIndex)
+        ? item.primaryUrlIndex
+        : 0;
+
+    if (primaryUrlIndex < 0 || primaryUrlIndex >= urls.length) {
+      primaryUrlIndex = 0;
+    }
+
+    return {
+      urls,
+      primaryUrlIndex,
+      primaryUrl: urls[primaryUrlIndex] || ""
+    };
+  }
+
+  // 全アイテムのURL構造を正規化（searcher.js 互換の url プロパティも同期）
+  normalizeAllItems(items) {
+    if (!Array.isArray(items)) return [];
+    return items.map((item) => {
+      const { urls, primaryUrlIndex, primaryUrl } = this.normalizeItemUrls(item);
+      return {
+        ...item,
+        urls,
+        primaryUrlIndex,
+        url: primaryUrl
+      };
+    });
+  }
+
+  // クリップボードへURLをコピーする
+  async copyToClipboard(text) {
+    if (!text) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        this.showToast("リンクをコピーしました");
+        return;
+      }
+    } catch (e) {
+      console.warn("Clipboard APIフォールバックへ移行:", e);
+    }
+
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand("copy");
+      this.showToast("リンクをコピーしました");
+    } catch {
+      this.showToast("コピーに失敗しました");
+    } finally {
+      document.body.removeChild(textarea);
+    }
   }
 
   // 独自確認モーダルを表示してユーザーの選択結果（true / false）を返す
@@ -471,7 +541,7 @@ class ArchiveApp {
     try {
       const data = JSON.parse(raw);
       this.archiveTitle = typeof data.title === "string" ? data.title : "";
-      this.items = Array.isArray(data.items) ? data.items : [];
+      this.items = this.normalizeAllItems(data.items);
       this.imageCounter = typeof data.imageCounter === "number" ? data.imageCounter : 1;
       if (data.linkedFolder) {
         await this.storage.restoreLinkedFolder(data.linkedFolder, false);
@@ -500,7 +570,7 @@ class ArchiveApp {
     this.archiveTitle = typeof payload.title === "string" ? payload.title : "";
     this.syncArchiveTitleUI();
 
-    this.items = payload.items;
+    this.items = this.normalizeAllItems(payload.items);
     this.imageCounter = typeof payload.imageCounter === "number" ? payload.imageCounter : 1;
     this.syncImageCounterWithData();
 
@@ -542,6 +612,8 @@ class ArchiveApp {
     this.items = [];
     this.imageCounter = 1;
     this.searchFilters = [];
+    this.currentUrls = [];
+    this.currentPrimaryUrlIndex = 0;
     this.currentTags = [];
     this.currentImages = [];
     this.activeDetailId = null;
@@ -673,6 +745,18 @@ class ArchiveApp {
       el.addEventListener("click", () => {
         this.closeModal(el.getAttribute("data-close"));
       });
+    });
+
+    // URL複数登録（Enter または 追加ボタン）
+    const urlInput = document.getElementById("urlInput");
+    urlInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        this.addUrlFromInput();
+      }
+    });
+    document.getElementById("addUrlBtn").addEventListener("click", () => {
+      this.addUrlFromInput();
     });
 
     // タグ入力（Enter または カンマ）
@@ -813,6 +897,80 @@ class ArchiveApp {
       } finally {
         e.target.value = "";
       }
+    });
+  }
+
+  // URL入力欄からリストへ追加（デフォルト代表はインデックス0）
+  addUrlFromInput() {
+    const input = document.getElementById("urlInput");
+    const raw = input.value.trim();
+    if (!raw) return;
+
+    this.currentUrls.push(raw);
+    if (this.currentUrls.length === 1) {
+      this.currentPrimaryUrlIndex = 0;
+    }
+    input.value = "";
+    this.renderUrlList();
+  }
+
+  // 登録済みURLリストを描画（代表URLの選択・直接編集・削除）
+  renderUrlList() {
+    const container = document.getElementById("urlItemList");
+    container.innerHTML = "";
+
+    if (this.currentPrimaryUrlIndex < 0 || this.currentPrimaryUrlIndex >= this.currentUrls.length) {
+      this.currentPrimaryUrlIndex = 0;
+    }
+
+    this.currentUrls.forEach((url, index) => {
+      const isPrimary = index === this.currentPrimaryUrlIndex;
+
+      const row = document.createElement("div");
+      row.className = "url-item-row" + (isPrimary ? " is-primary" : "");
+      row.innerHTML = `
+        <button
+          type="button"
+          class="url-primary-btn ${isPrimary ? "active" : ""}"
+          title="一覧カードのリンクに使用する代表URLに設定します"
+        >
+          ${isPrimary ? "★ 代表" : "☆ 代表にする"}
+        </button>
+        <input
+          type="url"
+          class="url-item-input"
+          value="${this.escapeHtml(url)}"
+          placeholder="https://example.com"
+          autocomplete="off"
+        />
+        <button type="button" class="url-remove-btn" title="このURLを削除">✕</button>
+      `;
+
+      // 代表URLの切り替え
+      row.querySelector(".url-primary-btn").addEventListener("click", () => {
+        this.currentPrimaryUrlIndex = index;
+        this.renderUrlList();
+      });
+
+      // URL文字列の直接編集
+      row.querySelector(".url-item-input").addEventListener("input", (e) => {
+        this.currentUrls[index] = e.target.value;
+      });
+
+      // URLの削除（削除後の代表インデックスを自動補正）
+      row.querySelector(".url-remove-btn").addEventListener("click", () => {
+        this.currentUrls.splice(index, 1);
+        if (this.currentUrls.length === 0) {
+          this.currentPrimaryUrlIndex = 0;
+        } else if (index === this.currentPrimaryUrlIndex) {
+          this.currentPrimaryUrlIndex = 0;
+        } else if (index < this.currentPrimaryUrlIndex) {
+          this.currentPrimaryUrlIndex -= 1;
+        }
+        this.renderUrlList();
+      });
+
+      container.appendChild(row);
     });
   }
 
@@ -1068,18 +1226,25 @@ class ArchiveApp {
       document.getElementById("itemTitle").value = item.title || "";
       document.getElementById("itemSeries").value = item.series || "";
       document.getElementById("itemAuthor").value = item.author || "";
-      document.getElementById("itemUrl").value = item.url || "";
+      document.getElementById("urlInput").value = "";
       document.getElementById("itemMemo").value = item.memo || "";
+
+      const { urls, primaryUrlIndex } = this.normalizeItemUrls(item);
+      this.currentUrls = [...urls];
+      this.currentPrimaryUrlIndex = primaryUrlIndex;
       this.currentTags = Array.isArray(item.tags) ? [...item.tags] : [];
       this.currentImages = Array.isArray(item.images) ? [...item.images] : [];
     } else {
       titleEl.textContent = "新規データの登録";
       document.getElementById("archiveForm").reset();
       document.getElementById("itemId").value = "";
+      this.currentUrls = [];
+      this.currentPrimaryUrlIndex = 0;
       this.currentTags = [];
       this.currentImages = [];
     }
 
+    this.renderUrlList();
     this.renderTagChips();
     await this.renderImagePreviews();
     this.openModal("editModal");
@@ -1087,7 +1252,16 @@ class ArchiveApp {
 
   // データの保存（新規追加 or 上書き更新）
   async saveFormItem() {
+    this.addUrlFromInput();
     this.addTagFromInput();
+
+    // 空文字のURL行を除外しつつ代表インデックスを保持
+    const rawPrimaryUrl = this.currentUrls[this.currentPrimaryUrlIndex] || "";
+    const cleanedUrls = this.currentUrls.map((u) => u.trim()).filter((u) => u !== "");
+    let nextPrimaryIndex = cleanedUrls.indexOf(rawPrimaryUrl.trim());
+    if (nextPrimaryIndex < 0) nextPrimaryIndex = 0;
+
+    const primaryUrl = cleanedUrls[nextPrimaryIndex] || "";
 
     const id = document.getElementById("itemId").value;
     const itemData = {
@@ -1096,7 +1270,9 @@ class ArchiveApp {
       series: document.getElementById("itemSeries").value.trim(),
       author: document.getElementById("itemAuthor").value.trim(),
       images: [...this.currentImages],
-      url: document.getElementById("itemUrl").value.trim(),
+      urls: cleanedUrls,
+      primaryUrlIndex: nextPrimaryIndex,
+      url: primaryUrl,
       tags: [...this.currentTags],
       memo: document.getElementById("itemMemo").value.trim(),
       updatedAt: new Date().toISOString()
@@ -1171,10 +1347,33 @@ class ArchiveApp {
 
       const hasImages = Array.isArray(item.images) && item.images.length > 0;
       const thumbUrl = hasImages ? await this.storage.getImageUrl(item.images[0]) : null;
+      const { urls, primaryUrl } = this.normalizeItemUrls(item);
 
       const tagsHtml = (item.tags || [])
         .map((t) => `<span class="tag-badge" data-tag="${this.escapeHtml(t)}">#${this.escapeHtml(t)}</span>`)
         .join("");
+
+      const linkHtml = primaryUrl
+        ? `
+          <div class="card-link-group">
+            <button
+              type="button"
+              class="card-link-copy-btn"
+              data-copy-url="${this.escapeHtml(primaryUrl)}"
+              title="マークをクリックしてURLをコピー"
+              aria-label="URLをコピー"
+            >🔗</button>
+            <a
+              href="${this.escapeHtml(primaryUrl)}"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="card-link-text"
+              title="${this.escapeHtml(primaryUrl)}"
+            >リンク</a>
+            ${urls.length > 1 ? `<span class="card-link-extra-badge">+${urls.length - 1}</span>` : ""}
+          </div>
+        `
+        : "";
 
       card.innerHTML = `
         <div class="card-thumb">
@@ -1193,11 +1392,7 @@ class ArchiveApp {
           ${item.memo ? `<p class="card-memo">${this.escapeHtml(item.memo)}</p>` : ""}
         </div>
         <div class="card-footer">
-          ${
-            item.url
-              ? `<a href="${this.escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" class="card-link">🔗 リンク</a>`
-              : ""
-          }
+          ${linkHtml}
           <div class="card-actions">
             <button type="button" class="btn btn-secondary btn-sm btn-edit">編集</button>
             <button type="button" class="btn btn-danger btn-sm btn-delete">削除</button>
@@ -1207,6 +1402,15 @@ class ArchiveApp {
 
       card.querySelector(".card-thumb").addEventListener("click", () => this.openDetailModal(item));
       card.querySelector(".card-title").addEventListener("click", () => this.openDetailModal(item));
+
+      // リンクマーク押下でコピー
+      const copyBtn = card.querySelector(".card-link-copy-btn");
+      if (copyBtn) {
+        copyBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.copyToClipboard(copyBtn.getAttribute("data-copy-url"));
+        });
+      }
 
       card.querySelectorAll(".tag-badge").forEach((badge) => {
         badge.addEventListener("click", () => {
@@ -1248,16 +1452,36 @@ class ArchiveApp {
       .map((t) => `<span class="tag-badge">#${this.escapeHtml(t)}</span>`)
       .join(" ");
 
-    document.getElementById("detailBody").innerHTML = `
+    const { urls, primaryUrlIndex } = this.normalizeItemUrls(item);
+    const urlsHtml =
+      urls.length > 0
+        ? `<div class="detail-url-list">
+            ${urls
+              .map(
+                (u, idx) => `
+                <div class="detail-url-item">
+                  ${idx === primaryUrlIndex ? `<span class="detail-url-primary-badge">★ 代表</span>` : ""}
+                  <button
+                    type="button"
+                    class="card-link-copy-btn detail-copy-url-btn"
+                    data-copy-url="${this.escapeHtml(u)}"
+                    title="マークをクリックしてURLをコピー"
+                  >🔗</button>
+                  <a href="${this.escapeHtml(u)}" target="_blank" rel="noopener noreferrer" class="detail-url-text">${this.escapeHtml(u)}</a>
+                </div>
+              `
+              )
+              .join("")}
+          </div>`
+        : "—";
+
+    const detailBody = document.getElementById("detailBody");
+    detailBody.innerHTML = `
       ${galleryHtml}
       <table class="detail-meta-table">
         <tr><th>シリーズ</th><td>${this.escapeHtml(item.series || "—")}</td></tr>
         <tr><th>作者</th><td>${this.escapeHtml(item.author || "—")}</td></tr>
-        <tr><th>URL</th><td>${
-          item.url
-            ? `<a href="${this.escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" class="card-link">${this.escapeHtml(item.url)}</a>`
-            : "—"
-        }</td></tr>
+        <tr><th>URL</th><td>${urlsHtml}</td></tr>
         <tr><th>タグ</th><td>${tagsHtml || "—"}</td></tr>
         <tr><th>登録画像ファイル</th><td>${(item.images || []).map((f) => this.escapeHtml(f)).join(", ") || "なし"}</td></tr>
       </table>
@@ -1266,6 +1490,13 @@ class ArchiveApp {
         <div class="detail-memo-box">${this.escapeHtml(item.memo || "（メモなし）")}</div>
       </div>
     `;
+
+    // 詳細モーダル内のコピーボタンイベント
+    detailBody.querySelectorAll(".detail-copy-url-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        this.copyToClipboard(btn.getAttribute("data-copy-url"));
+      });
+    });
 
     this.openModal("detailModal");
   }
