@@ -1200,3 +1200,174 @@ textarea:focus {
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* 複数URL登録・代表選択UI */
+.url-add-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.url-add-row input {
+  flex: 1;
+}
+
+.url-item-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.url-item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.35rem 0.5rem;
+}
+
+.url-item-row.is-primary {
+  border-color: rgba(59, 130, 246, 0.65);
+  background-color: rgba(59, 130, 246, 0.08);
+}
+
+.url-primary-btn {
+  background-color: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.55rem;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.url-primary-btn:hover {
+  border-color: var(--primary);
+  color: #93c5fd;
+}
+
+.url-primary-btn.active {
+  background-color: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+}
+
+.url-item-input {
+  flex: 1;
+  min-width: 0;
+  border: none !important;
+  background: transparent !important;
+  padding: 0.25rem 0.35rem !important;
+  font-size: 0.88rem !important;
+  color: var(--text-main);
+}
+
+.url-remove-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.url-remove-btn:hover {
+  color: #fca5a5;
+  background-color: rgba(239, 68, 68, 0.15);
+}
+
+/* カード＆詳細のリンク表示（マークでコピー / 文字で遷移） */
+.card-link-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.card-link-copy-btn {
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  color: #93c5fd;
+  border-radius: 6px;
+  padding: 0.15rem 0.38rem;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background-color 0.15s, transform 0.1s;
+  flex-shrink: 0;
+}
+
+.card-link-copy-btn:hover {
+  background: rgba(59, 130, 246, 0.28);
+  border-color: var(--primary);
+}
+
+.card-link-copy-btn:active {
+  transform: scale(0.94);
+}
+
+.card-link-text {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #60a5fa;
+  text-decoration: none;
+  padding: 0.1rem 0.2rem;
+}
+
+.card-link-text:hover {
+  text-decoration: underline;
+  color: #93c5fd;
+}
+
+.card-link-extra-badge {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  padding: 0.05rem 0.38rem;
+  border-radius: 999px;
+}
+
+.detail-url-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.detail-url-item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.detail-url-primary-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  background-color: var(--primary);
+  color: #ffffff;
+  padding: 0.1rem 0.45rem;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+
+.detail-url-text {
+  font-size: 0.88rem;
+  color: #60a5fa;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.detail-url-text:hover {
+  text-decoration: underline;
+  color: #93c5fd;
+}
