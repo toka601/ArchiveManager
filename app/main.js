@@ -268,7 +268,7 @@ class ArchiveApp {
     });
     tagInput.addEventListener("blur", () => this.addTagFromInput());
 
-    // 画像ドラッグ＆ドロップ & ファイル選択
+    // 画像ドラッグ＆ドロップ & ファイル選択 & ペースト
     const dropZone = document.getElementById("dropZone");
     const fileInput = document.getElementById("fileInput");
 
@@ -290,8 +290,23 @@ class ArchiveApp {
     dropZone.addEventListener("drop", async (e) => {
       e.preventDefault();
       dropZone.classList.remove("drag-over");
-      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        await this.handleImageFiles(e.dataTransfer.files);
+      if (e.dataTransfer) {
+        await this.handleDroppedDataTransfer(e.dataTransfer);
+      }
+    });
+
+    // 登録・編集モーダルが開いている間の画像ペースト（Ctrl+V / Cmd+V）対応
+    document.addEventListener("paste", async (e) => {
+      const editModal = document.getElementById("editModal");
+      if (!editModal || editModal.classList.contains("hidden")) return;
+      if (!e.clipboardData) return;
+
+      const pastedFiles = Array.from(e.clipboardData.files || []).filter((f) =>
+        f.type.startsWith("image/")
+      );
+      if (pastedFiles.length > 0) {
+        e.preventDefault();
+        await this.handleImageFiles(pastedFiles);
       }
     });
 
