@@ -68,13 +68,22 @@ const ArchiveConfig = {
    * 現在のアプリケーションバージョン
    * @type {string}
    */
-  APP_VERSION: "v1.7.0",
+  APP_VERSION: "v1.7.1",
 
   /**
    * バージョン更新履歴一覧（新しい順）
    * @type {VersionEntry[]}
    */
   VERSION_HISTORY: [
+    {
+      version: "v1.7.1",
+      title: "Webサイト上の画像のドラッグ＆ドロップ・貼り付け登録に対応",
+      changes: [
+        "他のWebサイトや別タブ上の画像をドロップゾーンへ直接ドラッグ＆ドロップして取り込めるようにしました。",
+        "MIMEタイプから拡張子を自動判定し、従来のローカル画像と同様に img1, img2... の連番で保存します。",
+        "セキュリティ制限（CORS）で直接取得できないサイト向けに、登録・編集モーダル上での画像貼り付け（Ctrl+V / Cmd+V）にも対応しました。"
+      ]
+    },
     {
       version: "v1.7.0",
       title: "JSONエクスポートのファイル名変更",
