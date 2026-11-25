@@ -222,6 +222,171 @@ Object.assign(ArchiveApp.prototype, {
   },
 
   /**
+   * ドロップされた DataTransfer（ローカルファイルまたはWebサイト上の画像URL/HTML）を判別して登録する
+   * @this {ArchiveApp}
+   * @param {DataTransfer} dataTransfer - ドロップイベントの DataTransfer オブジェクト
+   * @returns {Promise<void>}
+   */
+  async handleDroppedDataTransfer(dataTransfer) {
+    // 1. ローカルファイル（またはブラウザがバイナリファイルを直接渡した場合）
+    if (dataTransfer.files && dataTransfer.files.length > 0) {
+      await this.handleImageFiles(dataTransfer.files);
+      return;
+    }
+
+    // 2. Webサイト上の画像（HTML内の<img> または URL文字列）を抽出
+    const imageUrl = this.extractImageUrlFromDataTransfer(dataTransfer);
+    if (!imageUrl) {
+      this.showToast("画像ファイルまたは有効な画像URLをドロップしてください");
+      return;
+    }
+
+    await this.handleWebImageUrl(imageUrl);
+  },
+
+  /**
+   * DataTransfer からWebサイト上の画像URL（または data:image URI）を抽出する
+   * リンク付き画像の場合にリンク先HTMLではなく画像本体を優先するため text/html を先に解析する
+   * @this {ArchiveApp}
+   * @param {DataTransfer} dataTransfer - ドロップイベントの DataTransfer オブジェクト
+   * @returns {string|null} 抽出された画像URL（見つからない場合は null）
+   */
+  extractImageUrlFromDataTransfer(dataTransfer) {
+    // 優先1: text/html 内の <img src="..."> から画像ソースを取得
+    const htmlData = dataTransfer.getData("text/html");
+    if (htmlData) {
+      try {
+        const doc = new DOMParser().parseFromString(htmlData, "text/html");
+        const imgEl = doc.querySelector("img[src]");
+        if (imgEl) {
+          const src = imgEl.getAttribute("src")?.trim();
+          if (src && (/^https?:\/\//i.test(src) || /^data:image\//i.test(src))) {
+            return src;
+          }
+        }
+      } catch (e) {
+        console.warn("ドロップされたHTMLの解析に失敗:", e);
+      }
+    }
+
+    // 優先2: text/uri-list からURLを取得（#で始まるコメント行は除外）
+    const uriList = dataTransfer.getData("text/uri-list");
+    if (uriList) {
+      const lines = uriList
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith("#"));
+      for (const line of lines) {
+        if (/^https?:\/\//i.test(line) || /^data:image\//i.test(line)) {
+          return line;
+        }
+      }
+    }
+
+    // 優先3: text/plain からURLを取得
+    const plainText = dataTransfer.getData("text/plain")?.trim();
+    if (plainText && (/^https?:\/\//i.test(plainText) || /^data:image\//i.test(plainText))) {
+      return plainText;
+    }
+
+    return null;
+  },
+
+  /**
+   * MIMEタイプまたは元のファイル名・URLから適切な画像拡張子（ドット付き）を判定する
+   * @this {ArchiveApp}
+   * @param {string} mimeType - Blob の MIME タイプ（例: "image/jpeg"）
+   * @param {string} [fallbackNameOrUrl=""] - フォールバック判定用のファイル名またはURL
+   * @returns {string} 拡張子文字列（例: ".png", ".jpg"）
+   */
+  resolveImageExtension(mimeType, fallbackNameOrUrl = "") {
+    const mimeMap = {
+      "image/jpeg": ".jpg",
+      "image/jpg": ".jpg",
+      "image/png": ".png",
+      "image/gif": ".gif",
+      "image/webp": ".webp",
+      "image/bmp": ".bmp",
+      "image/svg+xml": ".svg",
+      "image/avif": ".avif"
+    };
+
+    const normalizedMime = String(mimeType || "").toLowerCase().split(";")[0].trim();
+    if (mimeMap[normalizedMime]) {
+      return mimeMap[normalizedMime];
+    }
+
+    // クエリパラメータを除去したパス末尾から拡張子を抽出
+    const cleanPath = String(fallbackNameOrUrl).split("?")[0].split("#")[0];
+    const extMatch = cleanPath.match(/\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i);
+    if (extMatch) {
+      const ext = extMatch[0].toLowerCase();
+      return ext === ".jpeg" ? ".jpg" : ext;
+    }
+
+    return ".png";
+  },
+
+  /**
+   * 既存のストレージ内画像を確認し、重複しない最新の連番カウンター値へ同期する
+   * @this {ArchiveApp}
+   * @returns {Promise<void>}
+   */
+  async ensureLatestImageCounter() {
+    const existing = await this.storage.listAvailableImages();
+    for (const fname of existing) {
+      const m = fname.match(/^img(\d+)/i);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (n >= this.imageCounter) this.imageCounter = n + 1;
+      }
+    }
+  },
+
+  /**
+   * Webサイトからドロップされた画像URL（http/https または data:image/）を取得して連番保存する
+   * @this {ArchiveApp}
+   * @param {string} imageUrl - 取得対象の画像URL
+   * @returns {Promise<void>}
+   */
+  async handleWebImageUrl(imageUrl) {
+    this.showToast("Web上の画像を取得しています...");
+
+    try {
+      const response = await fetch(imageUrl, { mode: "cors", credentials: "omit" });
+      if (!response.ok) {
+        throw new Error(`HTTPエラー (${response.status})`);
+      }
+
+      const blob = await response.blob();
+      if (!blob.type || !blob.type.startsWith("image/")) {
+        throw new Error("取得したデータが画像形式ではありませんでした（リンク先がWebページの可能性があります）。");
+      }
+
+      await this.ensureLatestImageCounter();
+
+      const ext = this.resolveImageExtension(blob.type, imageUrl);
+      const assignedFilename = `img${this.imageCounter}${ext}`;
+      this.imageCounter++;
+
+      await this.storage.saveImageFile(blob, assignedFilename);
+      this.currentImages.push(assignedFilename);
+
+      await this.renderImagePreviews();
+      this.showToast(`Web上の画像を「${assignedFilename}」として登録しました`);
+    } catch (err) {
+      console.warn("Web画像の直接取得に失敗:", err);
+      await this.showNotice(
+        "Web画像の取得エラー",
+        "相手サイトのセキュリティ制限（CORS）または通信エラーにより、ドラッグ＆ドロップから直接画像データを取得できませんでした。\n\n" +
+          "【代替方法】\n" +
+          "・対象画像を右クリックして「画像をコピー」し、この画面上で貼り付け（Ctrl+V / Cmd+V）する\n" +
+          "・一度PCに画像を保存してからドロップする"
+      );
+    }
+  },
+
+  /**
    * ドロップまたは選択された画像ファイルを "img" + 連番 の名前でストレージへ保存し編集リストに追加する
    * @this {ArchiveApp}
    * @param {FileList|File[]} fileList - 入力された画像ファイル一覧
@@ -234,18 +399,10 @@ Object.assign(ArchiveApp.prototype, {
       return;
     }
 
-    const existing = await this.storage.listAvailableImages();
-    for (const fname of existing) {
-      const m = fname.match(/^img(\d+)/i);
-      if (m) {
-        const n = parseInt(m[1], 10);
-        if (n >= this.imageCounter) this.imageCounter = n + 1;
-      }
-    }
+    await this.ensureLatestImageCounter();
 
     for (const file of imageFiles) {
-      const extMatch = file.name.match(/\.[a-zA-Z0-9]+$/);
-      const ext = extMatch ? extMatch[0].toLowerCase() : ".png";
+      const ext = this.resolveImageExtension(file.type, file.name);
       const assignedFilename = `img${this.imageCounter}${ext}`;
       this.imageCounter++;
 
